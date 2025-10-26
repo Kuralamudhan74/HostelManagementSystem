@@ -1,0 +1,23 @@
+Our next project came 
+
+Title : Hostel management system
+
+My hostel owner has many hostels in chennai, and many are staying here. So, it is difficult for him to store their details, track their previous records like how much did they paid, how much is their eb bill, in each room how much properties are there like chair, table and so on. So to maintain these we have to create a website which tracks the records of each individual. First there must be a user role access, admin and user (two types of user) next, the user can view only his data like his profile, his previous data of rents or anyother stored, pending due and others. While the admin has the rights to manipulate the data of the users like if the user1 paid their rent then they will inform the admin then the admin will make that month's rent as paid, if he had paid partially then we should have the option to calculate the pending due also. The user can only fill the details of theirs for the first time, means he has the access to to manipulate his own profile only the details like basic information other than that like rent or anyother related to hostel he should not have the permission of manipulating only admin can manipulate anything. Also new user and new admin can be signed up only by another admin account. There should be a proficient of password change for users and admin can change password for anybody. This is for monitoring each individuals, another requirement is we should calculate the total expense of each hostels like the food rent will be paid all at once, for part time cleaning person they will give salary, for electrician they will give a salary, so this is not fixed so lets have a dropdown and enter the salary they had spent for that person on that month. Add new option to the dropdown this can also be enabled by us. All the things in this application should be configurable there should not be a code change unless it's a new requirement. This project data should be normalized, no redudunt data, use foreign key relations. Use react vite for this project also design the proper plan like what is the backend we are gonna use, the database, anyother dependencies. Also plan how we are going to deploy
+
+The Room may contain 1,2,3,4 or etc no of tenants so this should be maintained.
+
+If anything changed for eg: For user23 the rent status gone from pending to paid or updated partially via a input box then there must be a track of which admin changed that.
+
+ If a tenant has vaccated the hostel then the active column should be 0 or anyother meaningful so that based on this condition in the UI there should be only previous data no input box, or present data to be shown
+
+In UI we can able to sort atleast via month wise everyone and in admin exclusively for tenats room no or name search
+
+This project needs to be delivered soon so as of now we don't need to implement the SMS, or payment gateway or anyother that includes payment to be paid.
+
+For attachments is there any options so that without payment to buckets or storage we can access like binary format as of now 
+
+The UI must be smooth, motion.div needs to be used simple and professional UI 
+
+Leave the deployment process it will be taken care by me. 
+
+So give a prompt to cursor AI including all the details of the project and give a readme file 

@@ -1,0 +1,80 @@
+# Docker Compose for Hostel Management System
+
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: hostel-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: hostel-management
+    volumes:
+      - mongodb_data:/data/db
+      - ./backend/scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - hostel-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: hostel-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - hostel-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hostel-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/hostel-management?authSource=admin
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      JWT_REFRESH_SECRET: your-super-secret-refresh-key-change-this-in-production
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      UPLOADS_DIR: /app/uploads
+      CORS_ORIGIN: http://localhost:5173
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - hostel-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hostel-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:5000/api
+    depends_on:
+      - backend
+    networks:
+      - hostel-network
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  hostel-network:
+    driver: bridge
