@@ -33,16 +33,15 @@ const TenantsPage: React.FC = () => {
     roomNumber: '',
   });
 
+
   const { register, handleSubmit, formState: { errors }, reset } = useForm({
     resolver: zodResolver(addTenantSchema),
   });
 
-  // Fetch tenants and unassigned tenant users
+  // Fetch tenants and unassigned tenant users with ALL data (no filtering on API)
   const { data: tenantsData, isLoading } = useQuery({
-    queryKey: ['tenants', searchParams],
+    queryKey: ['tenants'],
     queryFn: () => apiClient.getTenants({
-      name: searchParams.search || undefined,
-      room: searchParams.roomNumber || undefined,
       limit: 100,
       includeUnassigned: true,
     }),

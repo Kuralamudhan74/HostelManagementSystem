@@ -196,7 +196,22 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
         lastName: user!.lastName,
         phone: user!.phone,
         role: user!.role,
-        createdAt: user!.createdAt
+        createdAt: user!.createdAt,
+        // Extended profile fields
+        fatherName: user!.fatherName,
+        dateOfBirth: user!.dateOfBirth,
+        whatsappNumber: user!.whatsappNumber,
+        permanentAddress: user!.permanentAddress,
+        city: user!.city,
+        state: user!.state,
+        aadharNumber: user!.aadharNumber,
+        occupation: user!.occupation,
+        collegeCompanyName: user!.collegeCompanyName,
+        officeAddress: user!.officeAddress,
+        expectedDurationStay: user!.expectedDurationStay,
+        emergencyContactName: user!.emergencyContactName,
+        emergencyContactNumber: user!.emergencyContactNumber,
+        emergencyContactRelation: user!.emergencyContactRelation
       }
     });
   } catch (error) {
@@ -208,45 +223,48 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
 // Update profile
 export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { firstName, lastName, phone } = req.body;
-    const userId = req.user!._id;
-
-    // Get current user data for audit
-    const currentUser = await User.findById(userId);
-    const beforeData = {
-      firstName: currentUser!.firstName,
-      lastName: currentUser!.lastName,
-      phone: currentUser!.phone
+    const updateData = {
+      firstName: req.body.firstName,
+      lastName: req.body.lastName,
+      phone: req.body.phone,
+      fatherName: req.body.fatherName,
+      dateOfBirth: req.body.dateOfBirth,
+      whatsappNumber: req.body.whatsappNumber,
+      permanentAddress: req.body.permanentAddress,
+      city: req.body.city,
+      state: req.body.state,
+      aadharNumber: req.body.aadharNumber,
+      occupation: req.body.occupation,
+      collegeCompanyName: req.body.collegeCompanyName,
+      officeAddress: req.body.officeAddress,
+      expectedDurationStay: req.body.expectedDurationStay,
+      emergencyContactName: req.body.emergencyContactName,
+      emergencyContactNumber: req.body.emergencyContactNumber,
+      emergencyContactRelation: req.body.emergencyContactRelation,
     };
+
+    const userId = req.user!._id;
 
     // Update user
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      { firstName, lastName, phone },
+      updateData,
       { new: true }
     ).select('-password');
 
     // Log profile update
-    await logAction(req.user!, 'User', userId, 'update', beforeData, {
-      firstName,
-      lastName,
-      phone
-    });
+    await logAction(req.user!, 'User', userId, 'update', null, updateData);
 
     res.json({
       message: 'Profile updated successfully',
-      user: {
-        id: updatedUser!._id,
-        email: updatedUser!.email,
-        firstName: updatedUser!.firstName,
-        lastName: updatedUser!.lastName,
-        phone: updatedUser!.phone,
-        role: updatedUser!.role
-      }
+      user: updatedUser
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Update profile error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 

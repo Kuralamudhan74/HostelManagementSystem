@@ -17,12 +17,15 @@ const createRoomSchema = z.object({
   hostelId: z.string().min(1, 'Hostel is required'),
   capacity: z.number().min(1, 'Capacity must be at least 1'),
   rentAmount: z.number().min(1, 'Rent amount must be at least 1'),
+  isAC: z.boolean().optional(),
+  bathroomAttached: z.boolean().optional(),
 });
 
 const addTenantSchema = z.object({
   tenantId: z.string().min(1, 'Tenant is required'),
   startDate: z.string().min(1, 'Start date is required'),
   tenantShare: z.number().min(1, 'Share amount is required'),
+  withFood: z.boolean().optional(),
 });
 
 const RoomsPage: React.FC = () => {
@@ -35,6 +38,7 @@ const RoomsPage: React.FC = () => {
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [tenantSearch, setTenantSearch] = useState('');
   const [pendingAssignmentData, setPendingAssignmentData] = useState<any>(null);
+  const [selectedHostelFilter, setSelectedHostelFilter] = useState<string>('');
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm({
     resolver: zodResolver(createRoomSchema),
@@ -155,9 +159,18 @@ const RoomsPage: React.FC = () => {
     setIsAssignTenantModalOpen(true);
   };
 
-  const rooms = roomsData?.rooms || [];
+  const allRooms = roomsData?.rooms || [];
   const tenancies = tenantsData?.tenancies || [];
   const allTenantUsers = tenantsData?.allTenantUsers || [];
+
+  // Filter rooms by hostel
+  const filteredRooms = useMemo(() => {
+    if (!selectedHostelFilter) return allRooms;
+    return allRooms.filter((room: any) => {
+      const roomHostelId = room.hostelId?._id || room.hostelId?.id || room.hostelId;
+      return roomHostelId === selectedHostelFilter;
+    });
+  }, [allRooms, selectedHostelFilter]);
 
   // Helper function to get tenants for a room
   const getTenantsForRoom = (roomId: string) => {
@@ -166,6 +179,8 @@ const RoomsPage: React.FC = () => {
       return roomIdFromTenancy === roomId && t.isActive;
     });
   };
+
+  const rooms = filteredRooms; // Use filtered rooms
 
   // Get available tenants (both unassigned and those not currently in the selected room)
   const availableTenantsForAssigning = useMemo(() => {
@@ -255,6 +270,25 @@ const RoomsPage: React.FC = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Hostel Filter */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Filter by Hostel
+          </label>
+          <select
+            value={selectedHostelFilter}
+            onChange={(e) => setSelectedHostelFilter(e.target.value)}
+            className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Hostels</option>
+            {hostelsData?.hostels?.map((hostel: any) => (
+              <option key={hostel.id || hostel._id} value={hostel.id || hostel._id}>
+                {hostel.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {isLoading ? (
           <LoadingSpinner size="lg" />
         ) : (
@@ -451,6 +485,25 @@ const RoomsPage: React.FC = () => {
             )}
           </div>
 
+          <div className="flex items-center space-x-6 pt-2">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                {...register('isAC')}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700">Air Conditioned</span>
+            </label>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                {...register('bathroomAttached')}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700">Bathroom Attached</span>
+            </label>
+          </div>
+
           <div className="flex justify-end gap-3 pt-4">
             <Button
               type="button"
@@ -563,6 +616,17 @@ const RoomsPage: React.FC = () => {
                   {assignTenantForm.formState.errors.tenantShare.message as string}
                 </p>
               )}
+            </div>
+
+            <div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  {...assignTenantForm.register('withFood')}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">With Food</span>
+              </label>
             </div>
 
             <div className="flex justify-end gap-3 pt-4">

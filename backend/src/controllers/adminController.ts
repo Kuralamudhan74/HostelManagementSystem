@@ -33,7 +33,9 @@ const createRoomSchema = z.object({
     roomNumber: z.string().min(1),
     hostelId: z.string().min(1),
     capacity: z.number().min(1),
-    rentAmount: z.number().min(0)
+    rentAmount: z.number().min(0),
+    isAC: z.boolean().optional(),
+    bathroomAttached: z.boolean().optional()
   })
 });
 
@@ -41,7 +43,8 @@ const addTenantToRoomSchema = z.object({
   body: z.object({
     tenantId: z.string().min(1),
     startDate: z.string().min(1),
-    tenantShare: z.number().optional()
+    tenantShare: z.number().optional(),
+    withFood: z.boolean().optional()
   })
 });
 
@@ -112,10 +115,62 @@ export const getHostels = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const deleteHostel = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { hostelId } = req.params;
+
+    const hostel = await Hostel.findById(hostelId);
+    
+    if (!hostel) {
+      res.status(404).json({ message: 'Hostel not found' });
+      return;
+    }
+
+    // Check if hostel has any active rooms with tenants
+    const rooms = await Room.find({ hostelId, isActive: true });
+    
+    for (const room of rooms) {
+      const activeTenancies = await Tenancy.countDocuments({
+        roomId: room._id,
+        isActive: true
+      });
+
+      if (activeTenancies > 0) {
+        res.status(400).json({ 
+          message: 'Cannot delete hostel with active tenants. Please remove or reassign all tenants first.'
+        });
+        return;
+      }
+    }
+
+    // Set hostel to inactive instead of actually deleting
+    hostel.isActive = false;
+    await hostel.save();
+
+    // Set all rooms to inactive
+    await Room.updateMany({ hostelId }, { isActive: false });
+
+    await logAction(req.user!, 'Hostel', hostel._id, 'delete', {
+      name: hostel.name,
+      address: hostel.address
+    }, null);
+
+    res.json({
+      message: 'Hostel deleted successfully'
+    });
+  } catch (error: any) {
+    console.error('Delete hostel error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 // Room management
 export const createRoom = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { roomNumber, hostelId, capacity, rentAmount } = req.body;
+    const { roomNumber, hostelId, capacity, rentAmount, isAC, bathroomAttached } = req.body;
 
     console.log('Creating room with data:', { roomNumber, hostelId, capacity, rentAmount });
 
@@ -132,7 +187,9 @@ export const createRoom = async (req: AuthRequest, res: Response): Promise<void>
       roomNumber,
       hostelId,
       capacity,
-      rentAmount
+      rentAmount,
+      isAC: isAC || false,
+      bathroomAttached: bathroomAttached || false
     });
 
     await room.save();
@@ -222,7 +279,8 @@ export const addTenantToRoom = async (req: AuthRequest, res: Response): Promise<
       roomId,
       tenantId,
       startDate: new Date(startDate),
-      tenantShare: tenantShare || undefined
+      tenantShare: tenantShare || undefined,
+      withFood: req.body.withFood || false
     });
 
     await tenancy.save();

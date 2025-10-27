@@ -113,7 +113,7 @@ class ApiClient {
     return response.data;
   }
 
-  async updateProfile(data: { firstName: string; lastName: string; phone?: string }): Promise<{ user: any }> {
+  async updateProfile(data: any): Promise<{ user: any }> {
     const response = await this.client.patch('/me', data);
     return response.data;
   }

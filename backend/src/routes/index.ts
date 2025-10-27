@@ -13,9 +13,11 @@ import {
 import { 
   createHostel,
   getHostels,
+  deleteHostel,
   createRoom,
   getRooms,
   addTenantToRoom,
+  endTenancy,
   getTenants,
   recordPayment,
   getPayments,
@@ -65,6 +67,10 @@ router.patch('/me', authenticate, updateProfile);
 // Admin routes
 router.post('/admin/hostels', authenticate, requireAdmin, validate(createHostelSchema), createHostel);
 router.get('/admin/hostels', authenticate, requireAdmin, getHostels);
+router.delete('/admin/hostels/:hostelId', authenticate, requireAdmin, async (req, res, next) => {
+  const { deleteHostel } = await import('../controllers/adminController');
+  return deleteHostel(req as any, res);
+});
 
 router.post('/admin/rooms', authenticate, requireAdmin, validate(createRoomSchema), createRoom);
 router.get('/admin/rooms', authenticate, requireAdmin, getRooms);

@@ -10,6 +10,21 @@ export interface IUser extends Document {
   phone?: string;
   role: 'admin' | 'tenant';
   isActive: boolean;
+  // Extended profile fields
+  fatherName?: string;
+  dateOfBirth?: string;
+  whatsappNumber?: string;
+  permanentAddress?: string;
+  city?: string;
+  state?: string;
+  aadharNumber?: string;
+  occupation?: string;
+  collegeCompanyName?: string;
+  officeAddress?: string;
+  expectedDurationStay?: string;
+  emergencyContactName?: string;
+  emergencyContactNumber?: string;
+  emergencyContactRelation?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,7 +36,22 @@ const userSchema = new Schema<IUser>({
   lastName: { type: String, required: true },
   phone: { type: String },
   role: { type: String, enum: ['admin', 'tenant'], required: true },
-  isActive: { type: Boolean, default: true }
+  isActive: { type: Boolean, default: true },
+  // Extended profile fields
+  fatherName: { type: String },
+  dateOfBirth: { type: String },
+  whatsappNumber: { type: String },
+  permanentAddress: { type: String },
+  city: { type: String },
+  state: { type: String },
+  aadharNumber: { type: String },
+  occupation: { type: String },
+  collegeCompanyName: { type: String },
+  officeAddress: { type: String },
+  expectedDurationStay: { type: String },
+  emergencyContactName: { type: String },
+  emergencyContactNumber: { type: String },
+  emergencyContactRelation: { type: String }
 }, {
   timestamps: true
 });
@@ -75,6 +105,8 @@ export interface IRoom extends Document {
   hostelId: mongoose.Types.ObjectId;
   capacity: number;
   rentAmount: number;
+  isAC?: boolean;
+  bathroomAttached?: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -85,6 +117,8 @@ const roomSchema = new Schema<IRoom>({
   hostelId: { type: Schema.Types.ObjectId, ref: 'Hostel', required: true },
   capacity: { type: Number, required: true },
   rentAmount: { type: Number, required: true },
+  isAC: { type: Boolean, default: false },
+  bathroomAttached: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true }
 }, {
   timestamps: true
@@ -98,6 +132,8 @@ export interface ITenancy extends Document {
   startDate: Date;
   endDate?: Date;
   tenantShare?: number; // For shared rooms
+  withFood?: boolean;
+  foodIncluded?: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -109,6 +145,8 @@ const tenancySchema = new Schema<ITenancy>({
   startDate: { type: Date, required: true },
   endDate: { type: Date },
   tenantShare: { type: Number }, // Percentage or fixed amount
+  withFood: { type: Boolean, default: false },
+  foodIncluded: { type: Boolean, default: false }, // Alias for withFood
   isActive: { type: Boolean, default: true }
 }, {
   timestamps: true
