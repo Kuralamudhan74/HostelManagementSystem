@@ -677,6 +677,29 @@ export const getExpenses = async (req: AuthRequest, res: Response): Promise<void
   }
 };
 
+export const getTenantProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenantId } = req.params;
+    
+    const user = await User.findById(tenantId).select('-password');
+    
+    if (!user) {
+      res.status(404).json({ message: 'Tenant not found' });
+      return;
+    }
+    
+    res.json({
+      user
+    });
+  } catch (error: any) {
+    console.error('Get tenant profile error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 export { 
   createHostelSchema, 
   createRoomSchema, 

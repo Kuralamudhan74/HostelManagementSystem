@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ArrowLeft, Plus, Search, MapPin, Phone, Mail, X } from 'lucide-react';
+import { Users, ArrowLeft, Plus, Search, MapPin, Phone, Mail, X, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -26,7 +26,10 @@ const TenantsPage: React.FC = () => {
   
   const [isAddTenantModalOpen, setIsAddTenantModalOpen] = useState(false);
   const [isUnassignModalOpen, setIsUnassignModalOpen] = useState(false);
+  const [isViewProfileModalOpen, setIsViewProfileModalOpen] = useState(false);
   const [selectedTenancy, setSelectedTenancy] = useState<any>(null);
+  const [selectedTenantProfile, setSelectedTenantProfile] = useState<any>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   
   const [searchParams, setSearchParams] = useState({
     search: '',
@@ -97,6 +100,20 @@ const TenantsPage: React.FC = () => {
   const handleUnassignClick = (tenancy: any) => {
     setSelectedTenancy(tenancy);
     setIsUnassignModalOpen(true);
+  };
+
+  const handleViewProfile = async (tenantId: string) => {
+    try {
+      setIsLoadingProfile(true);
+      const response = await apiClient.getTenantProfile(tenantId);
+      setSelectedTenantProfile(response.user);
+      setIsViewProfileModalOpen(true);
+    } catch (error: any) {
+      console.error('View profile error:', error);
+      toast.error(error.response?.data?.message || 'Failed to load tenant profile');
+    } finally {
+      setIsLoadingProfile(false);
+    }
   };
 
   const handleUnassign = () => {
@@ -293,15 +310,26 @@ const TenantsPage: React.FC = () => {
                   <p className="text-xs text-gray-500 mb-3">
                     Since: {new Date(tenancy.startDate).toLocaleDateString()}
                   </p>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => handleUnassignClick(tenancy)}
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Unassign from Room
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handleViewProfile(tenancy.tenantId?.id || tenancy.tenantId?._id || tenancy.tenantId)}
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View Profile
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handleUnassignClick(tenancy)}
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Unassign
+                    </Button>
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -347,9 +375,18 @@ const TenantsPage: React.FC = () => {
                 </div>
 
                 <div className="pt-4 border-t border-gray-200">
-                  <p className="text-sm text-yellow-700 mb-2">
-                    This tenant needs to be assigned to a room. Go to Rooms page to assign them.
+                  <p className="text-sm text-yellow-700 mb-3">
+                    This tenant needs to be assigned to a room.
                   </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full mb-2"
+                    onClick={() => handleViewProfile(tenant.id || tenant._id)}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Profile
+                  </Button>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -515,6 +552,132 @@ const TenantsPage: React.FC = () => {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* View Profile Modal */}
+      <Modal
+        isOpen={isViewProfileModalOpen}
+        onClose={() => {
+          setIsViewProfileModalOpen(false);
+          setSelectedTenantProfile(null);
+        }}
+        title="Tenant Profile"
+        size="xl"
+      >
+        {isLoadingProfile ? (
+          <div className="flex justify-center py-8">
+            <LoadingSpinner />
+          </div>
+        ) : selectedTenantProfile ? (
+          <div className="space-y-6 py-2">
+            {/* Personal Information */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">First Name</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.firstName || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Last Name</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.lastName || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Email</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.email || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Phone</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.phone || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Father Name</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.fatherName || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.dateOfBirth || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Information */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">WhatsApp Number</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.whatsappNumber || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Address Information */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Address Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">Permanent Address</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.permanentAddress || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">City</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.city || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">State</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.state || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Identity & Occupation */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Identity & Occupation</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Aadhar Number</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.aadharNumber || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Occupation</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.occupation || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">College/Company/Institute Name</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.collegeCompanyName || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Office/College/Institute Address</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.officeAddress || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Expected Duration of Stay</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.expectedDurationStay || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Contact */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Emergency Contact</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Emergency Contact Name</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.emergencyContactName || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Relation</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.emergencyContactRelation || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Emergency Contact Number</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.emergencyContactNumber || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

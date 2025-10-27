@@ -163,6 +163,11 @@ class ApiClient {
     return response.data;
   }
 
+  async getTenantProfile(tenantId: string): Promise<{ user: any }> {
+    const response = await this.client.get(`/admin/tenants/${tenantId}/profile`);
+    return response.data;
+  }
+
   async recordPayment(data: PaymentForm): Promise<any> {
     const response = await this.client.post('/admin/payments', data);
     return response.data;

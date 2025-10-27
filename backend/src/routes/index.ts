@@ -81,6 +81,10 @@ router.patch('/admin/tenancies/:tenancyId/end', authenticate, requireAdmin, asyn
   return endTenancy(req as any, res);
 });
 router.get('/admin/tenants', authenticate, requireAdmin, getTenants);
+router.get('/admin/tenants/:tenantId/profile', authenticate, requireAdmin, async (req, res, next) => {
+  const { getTenantProfile } = await import('../controllers/adminController');
+  return getTenantProfile(req as any, res);
+});
 
 router.post('/admin/payments', authenticate, requireAdmin, validate(recordPaymentSchema), recordPayment);
 router.get('/admin/payments', authenticate, requireAdmin, getPayments);

@@ -49,7 +49,7 @@ const Modal: React.FC<ModalProps> = ({
           {/* Modal */}
           <motion.div
             className={cn(
-              'relative bg-white rounded-lg shadow-xl w-full',
+              'relative bg-white rounded-lg shadow-xl w-full max-h-[90vh] overflow-hidden flex flex-col',
               sizeClasses[size],
               className
             )}
@@ -57,6 +57,7 @@ const Modal: React.FC<ModalProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.2 }}
+            onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
             {title && (
@@ -72,7 +73,7 @@ const Modal: React.FC<ModalProps> = ({
             )}
 
             {/* Content */}
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto flex-1">
               {children}
             </div>
           </motion.div>
