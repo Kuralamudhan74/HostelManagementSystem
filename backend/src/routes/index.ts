@@ -18,8 +18,10 @@ import {
   addTenantToRoom,
   getTenants,
   recordPayment,
+  getPayments,
   suggestPaymentAllocations,
   createExpense,
+  getExpenses,
   getExpenseCategories,
   createExpenseCategory,
   createHostelSchema,
@@ -52,6 +54,7 @@ const router = Router();
 
 // Authentication routes
 router.post('/auth/login', validate(loginSchema), login);
+router.post('/auth/register', authenticate, requireAdmin, validate(registerSchema), register);
 router.post('/auth/refresh', validate(refreshTokenSchema), refreshToken);
 router.post('/auth/logout', authenticate, logout);
 
@@ -67,12 +70,18 @@ router.post('/admin/rooms', authenticate, requireAdmin, validate(createRoomSchem
 router.get('/admin/rooms', authenticate, requireAdmin, getRooms);
 
 router.post('/admin/rooms/:roomId/tenants', authenticate, requireAdmin, validate(addTenantToRoomSchema), addTenantToRoom);
+router.patch('/admin/tenancies/:tenancyId/end', authenticate, requireAdmin, async (req, res, next) => {
+  const { endTenancy } = await import('../controllers/adminController');
+  return endTenancy(req as any, res);
+});
 router.get('/admin/tenants', authenticate, requireAdmin, getTenants);
 
 router.post('/admin/payments', authenticate, requireAdmin, validate(recordPaymentSchema), recordPayment);
+router.get('/admin/payments', authenticate, requireAdmin, getPayments);
 router.get('/admin/payments/suggest', authenticate, requireAdmin, suggestPaymentAllocations);
 
 router.post('/admin/expenses', authenticate, requireAdmin, validate(createExpenseSchema), createExpense);
+router.get('/admin/expenses', authenticate, requireAdmin, getExpenses);
 router.get('/admin/expense-categories', authenticate, requireAdmin, getExpenseCategories);
 router.post('/admin/expense-categories', authenticate, requireAdmin, createExpenseCategory);
 

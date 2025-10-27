@@ -56,6 +56,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('No auth header or invalid format:', authHeader ? 'Present but invalid' : 'Missing');
       res.status(401).json({ message: 'Access token required' });
       return;
     }
@@ -63,16 +64,27 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     const token = authHeader.substring(7);
     const decoded = verifyToken(token);
     
+    console.log('Decoded token:', { userId: decoded.userId, email: decoded.email, role: decoded.role });
+    
     const user = await User.findById(decoded.userId).select('-password');
-    if (!user || !user.isActive) {
-      res.status(401).json({ message: 'Invalid token or user not found' });
+    if (!user) {
+      console.error('User not found:', decoded.userId);
+      res.status(401).json({ message: 'User not found' });
+      return;
+    }
+    
+    if (!user.isActive) {
+      console.error('User is not active:', decoded.userId);
+      res.status(401).json({ message: 'User account is inactive' });
       return;
     }
 
+    console.log('User authenticated:', { id: user._id, email: user.email, role: user.role });
     req.user = user;
     next();
-  } catch (error) {
-    res.status(401).json({ message: 'Invalid token' });
+  } catch (error: any) {
+    console.error('Authentication error:', error.message);
+    res.status(401).json({ message: error.message || 'Invalid token' });
   }
 };
 
@@ -87,9 +99,20 @@ export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction
 
 // Tenant authorization middleware
 export const requireTenant = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  if (!req.user || req.user.role !== 'tenant') {
+  console.log('requireTenant check:', { hasUser: !!req.user, userRole: req.user?.role });
+  
+  if (!req.user) {
+    console.error('No user in requireTenant');
+    res.status(403).json({ message: 'Authentication required' });
+    return;
+  }
+  
+  if (req.user.role !== 'tenant') {
+    console.error('User role is not tenant:', req.user.role);
     res.status(403).json({ message: 'Tenant access required' });
     return;
   }
+  
+  console.log('Tenant access granted for:', req.user.email);
   next();
 };

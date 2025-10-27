@@ -40,28 +40,42 @@ class ApiClient {
           try {
             const refreshToken = localStorage.getItem('refreshToken');
             if (refreshToken) {
+              // Use axios directly for refresh to avoid infinite loop
               const response = await axios.post('/api/auth/refresh', {
                 refreshToken,
+              }, {
+                headers: {
+                  'Content-Type': 'application/json'
+                }
               });
 
-              const { accessToken, refreshToken: newRefreshToken } = response.data;
+              const { token: accessToken, refreshToken: newRefreshToken } = response.data;
               localStorage.setItem('accessToken', accessToken);
               localStorage.setItem('refreshToken', newRefreshToken);
 
-              // Retry original request
+              // Retry original request with new token
               originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-              return this.client(originalRequest);
+              return axios(originalRequest);
+            } else {
+              // No refresh token, redirect to login
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('refreshToken');
+              if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+              }
             }
           } catch (refreshError) {
             // Refresh failed, redirect to login
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
-            window.location.href = '/login';
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login';
+            }
           }
         }
 
         // Show error toast for non-401 errors
-        if (error.response?.status !== 401) {
+        if (error.response?.status && error.response.status !== 401 && error.response.status !== 403) {
           const message = error.response?.data?.message || 'An error occurred';
           toast.error(message);
         }
@@ -137,15 +151,31 @@ class ApiClient {
     name?: string;
     month?: string;
     active?: string;
+    includeUnassigned?: boolean;
     page?: number;
     limit?: number;
-  }): Promise<{ tenancies: any[]; pagination: any }> {
-    const response = await this.client.get('/admin/tenants', { params });
+  }): Promise<{ tenancies: any[]; allTenantUsers?: any[]; pagination: any }> {
+    const requestParams: any = { ...params };
+    if (params?.includeUnassigned) {
+      requestParams.includeUnassigned = 'true';
+    }
+    const response = await this.client.get('/admin/tenants', { params: requestParams });
     return response.data;
   }
 
   async recordPayment(data: PaymentForm): Promise<any> {
     const response = await this.client.post('/admin/payments', data);
+    return response.data;
+  }
+
+  async getPayments(params?: {
+    tenantId?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ payments: any[]; pagination: any }> {
+    const response = await this.client.get('/admin/payments', { params });
     return response.data;
   }
 
@@ -174,6 +204,18 @@ class ApiClient {
     expenseDate: string;
   }): Promise<any> {
     const response = await this.client.post('/admin/expenses', data);
+    return response.data;
+  }
+
+  async getExpenses(params?: {
+    hostelId?: string;
+    categoryId?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ expenses: any[]; pagination: any }> {
+    const response = await this.client.get('/admin/expenses', { params });
     return response.data;
   }
 
