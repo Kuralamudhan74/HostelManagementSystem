@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { getTenantDues, getPaymentHistory } from '../utils/paymentUtils';
-import { Tenancy, MonthlyRent, Bill } from '../models';
+import { Tenancy, MonthlyRent, Bill, RoomEBBill } from '../models';
 
 // Get tenant's dues and payments
 export const getMyDues = async (req: AuthRequest, res: Response) => {
@@ -12,9 +12,47 @@ export const getMyDues = async (req: AuthRequest, res: Response) => {
     const dues = await getTenantDues(tenantId, month as string);
     const paymentHistory = await getPaymentHistory(tenantId, 20);
 
+    // Get current month rent status
+    const currentDate = new Date();
+    const currentPeriod = month || `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}`;
+    
+    const activeTenancy = await Tenancy.findOne({ tenantId, isActive: true });
+    
+    let currentRent = null;
+    if (activeTenancy) {
+      currentRent = await MonthlyRent.findOne({
+        tenancyId: activeTenancy._id,
+        period: currentPeriod
+      });
+
+      // If current rent exists, enhance it with EB information
+      if (currentRent) {
+        const roomEBBill = await RoomEBBill.findOne({
+          roomId: activeTenancy.roomId,
+          period: currentPeriod
+        });
+
+        // Calculate EB share
+        const activeTenantsCount = await Tenancy.countDocuments({
+          roomId: activeTenancy.roomId,
+          isActive: true
+        });
+        const ebShare = roomEBBill ? roomEBBill.amount / activeTenantsCount : 0;
+        
+        // Convert to plain object and add EB info
+        const rentObj: any = currentRent.toObject();
+        rentObj.baseAmount = rentObj.amount; // Store original rent amount
+        rentObj.ebShare = ebShare;
+        rentObj.totalDue = rentObj.amount + ebShare; // Total due includes EB
+        
+        currentRent = rentObj;
+      }
+    }
+
     res.json({
       dues,
-      paymentHistory
+      paymentHistory,
+      currentRent
     });
   } catch (error) {
     console.error('Get my dues error:', error);
@@ -131,10 +169,38 @@ export const getMyDashboard = async (req: AuthRequest, res: Response) => {
     const currentDate = new Date();
     const currentPeriod = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}`;
     
-    const currentRent = await MonthlyRent.findOne({
-      'tenancy.tenantId': tenantId,
-      period: currentPeriod
-    }).populate('tenancy');
+    const activeTenancy = await Tenancy.findOne({ tenantId, isActive: true });
+    
+    let currentRent = null;
+    if (activeTenancy) {
+      currentRent = await MonthlyRent.findOne({
+        tenancyId: activeTenancy._id,
+        period: currentPeriod
+      });
+
+      // If current rent exists, enhance it with EB information
+      if (currentRent) {
+        const roomEBBill = await RoomEBBill.findOne({
+          roomId: activeTenancy.roomId,
+          period: currentPeriod
+        });
+
+        // Calculate EB share
+        const activeTenantsCount = await Tenancy.countDocuments({
+          roomId: activeTenancy.roomId,
+          isActive: true
+        });
+        const ebShare = roomEBBill ? roomEBBill.amount / activeTenantsCount : 0;
+        
+        // Convert to plain object and add EB info
+        const rentObj: any = currentRent.toObject();
+        rentObj.baseAmount = rentObj.amount; // Store original rent amount
+        rentObj.ebShare = ebShare;
+        rentObj.totalDue = rentObj.amount + ebShare; // Total due includes EB
+        
+        currentRent = rentObj;
+      }
+    }
 
     res.json({
       tenancy,

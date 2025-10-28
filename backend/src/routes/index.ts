@@ -26,6 +26,10 @@ import {
   getExpenses,
   getExpenseCategories,
   createExpenseCategory,
+  createOrUpdateEBBill,
+  getRoomEBBills,
+  updateRentPaymentStatus,
+  getDashboardStats,
   createHostelSchema,
   createRoomSchema,
   addTenantToRoomSchema,
@@ -65,6 +69,7 @@ router.get('/me', authenticate, getProfile);
 router.patch('/me', authenticate, updateProfile);
 
 // Admin routes
+router.get('/admin/dashboard/stats', authenticate, requireAdmin, getDashboardStats);
 router.post('/admin/hostels', authenticate, requireAdmin, validate(createHostelSchema), createHostel);
 router.get('/admin/hostels', authenticate, requireAdmin, getHostels);
 router.delete('/admin/hostels/:hostelId', authenticate, requireAdmin, async (req, res, next) => {
@@ -74,6 +79,10 @@ router.delete('/admin/hostels/:hostelId', authenticate, requireAdmin, async (req
 
 router.post('/admin/rooms', authenticate, requireAdmin, validate(createRoomSchema), createRoom);
 router.get('/admin/rooms', authenticate, requireAdmin, getRooms);
+router.delete('/admin/rooms/:roomId', authenticate, requireAdmin, async (req, res, next) => {
+  const { deleteRoom } = await import('../controllers/adminController');
+  return deleteRoom(req as any, res);
+});
 
 router.post('/admin/rooms/:roomId/tenants', authenticate, requireAdmin, validate(addTenantToRoomSchema), addTenantToRoom);
 router.patch('/admin/tenancies/:tenancyId/end', authenticate, requireAdmin, async (req, res, next) => {
@@ -85,6 +94,10 @@ router.get('/admin/tenants/:tenantId/profile', authenticate, requireAdmin, async
   const { getTenantProfile } = await import('../controllers/adminController');
   return getTenantProfile(req as any, res);
 });
+router.patch('/admin/tenants/:tenantId/status', authenticate, requireAdmin, async (req, res, next) => {
+  const { updateTenantStatus } = await import('../controllers/adminController');
+  return updateTenantStatus(req as any, res);
+});
 
 router.post('/admin/payments', authenticate, requireAdmin, validate(recordPaymentSchema), recordPayment);
 router.get('/admin/payments', authenticate, requireAdmin, getPayments);
@@ -94,6 +107,13 @@ router.post('/admin/expenses', authenticate, requireAdmin, validate(createExpens
 router.get('/admin/expenses', authenticate, requireAdmin, getExpenses);
 router.get('/admin/expense-categories', authenticate, requireAdmin, getExpenseCategories);
 router.post('/admin/expense-categories', authenticate, requireAdmin, createExpenseCategory);
+
+// EB Bill routes
+router.post('/admin/eb-bills', authenticate, requireAdmin, createOrUpdateEBBill);
+router.get('/admin/eb-bills', authenticate, requireAdmin, getRoomEBBills);
+
+// Rent status routes
+router.patch('/admin/rents/:rentId/payment-status', authenticate, requireAdmin, updateRentPaymentStatus);
 
 // Tenant routes
 router.get('/me/dues', authenticate, requireTenant, getMyDues);

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { 
   Hostel, 
   Room, 
+  RoomEBBill,
   Tenancy, 
   User, 
   MonthlyRent, 
@@ -254,6 +255,56 @@ export const getRooms = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const deleteRoom = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { roomId } = req.params;
+
+    const room = await Room.findById(roomId);
+    
+    if (!room) {
+      res.status(404).json({ message: 'Room not found' });
+      return;
+    }
+
+    // Check if room has any active tenants
+    const activeTenancies = await Tenancy.countDocuments({
+      roomId: room._id,
+      isActive: true
+    });
+
+    if (activeTenancies > 0) {
+      res.status(400).json({ 
+        message: 'Cannot delete room with active tenants. Please remove all tenants first.'
+      });
+      return;
+    }
+
+    // Set room to inactive instead of actually deleting
+    room.isActive = false;
+    await room.save();
+
+    // Update hostel room count
+    await Hostel.findByIdAndUpdate(room.hostelId, {
+      $inc: { totalRooms: -1 }
+    });
+
+    await logAction(req.user!, 'Room', room._id, 'delete', {
+      roomNumber: room.roomNumber,
+      hostelId: room.hostelId
+    }, null);
+
+    res.json({
+      message: 'Room deleted successfully'
+    });
+  } catch (error: any) {
+    console.error('Delete room error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 // Tenant management
 export const addTenantToRoom = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -416,54 +467,79 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
   try {
     const { tenantId, amount, paymentMethod, paymentDate, description, allocations = [] } = req.body;
 
-    // If no allocations, just create the payment
+    let finalAllocations = allocations;
+
+    // If no allocations provided, auto-allocate to current month dues
     if (!allocations || allocations.length === 0) {
-      const payment = new Payment({
-        tenantId,
-        amount,
-        paymentMethod,
-        paymentDate: new Date(paymentDate),
-        description
-      });
+      // Get current month dues
+      const currentDate = new Date();
+      const currentPeriod = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      // Find active tenancy
+      const activeTenancy = await Tenancy.findOne({ tenantId, isActive: true });
+      
+      if (activeTenancy) {
+        // Get current month rent
+        const currentRent = await MonthlyRent.findOne({
+          tenancyId: activeTenancy._id,
+          period: currentPeriod
+        });
 
-      await payment.save();
+        // Get EB bill for this room
+        const roomEBBill = await RoomEBBill.findOne({
+          roomId: activeTenancy.roomId,
+          period: currentPeriod
+        });
 
-      await logAction(req.user!, 'Payment', payment._id, 'create', null, {
-        tenantId,
-        amount,
-        paymentMethod,
-        paymentDate,
-        description
-      });
+        // Calculate total due (rent + EB share)
+        const activeTenantsCount = await Tenancy.countDocuments({
+          roomId: activeTenancy.roomId,
+          isActive: true
+        });
+        const ebShare = roomEBBill ? roomEBBill.amount / activeTenantsCount : 0;
+        const baseRent = currentRent?.amount || 0;
+        const totalDue = baseRent + ebShare;
+        const alreadyPaid = currentRent?.amountPaid || 0;
+        const remainingDue = totalDue - alreadyPaid;
 
-      res.status(201).json({
-        message: 'Payment recorded successfully',
-        payment
-      });
-    } else {
-      // If allocations exist, use the allocation function
-      const payment = await recordPaymentWithAllocations({
-        tenantId,
-        amount,
-        paymentMethod,
-        paymentDate: new Date(paymentDate),
-        description,
-        allocations
-      });
+        finalAllocations = [];
+        let remainingAmount = amount;
 
-      await logAction(req.user!, 'Payment', payment._id, 'create', null, {
-        tenantId,
-        amount,
-        paymentMethod,
-        paymentDate,
-        allocations
-      });
-
-      res.status(201).json({
-        message: 'Payment recorded successfully',
-        payment
-      });
+        // Allocate to rent (this includes the base rent, and we'll treat EB as part of rent)
+        if (currentRent && remainingDue > 0) {
+          const allocateAmount = Math.min(remainingAmount, remainingDue);
+          
+          finalAllocations.push({
+            dueId: currentRent._id.toString(),
+            dueType: 'rent',
+            amount: allocateAmount
+          });
+        }
+      }
     }
+
+    // Use the allocation function to record payment
+    const payment = await recordPaymentWithAllocations({
+      tenantId,
+      amount,
+      paymentMethod,
+      paymentDate: new Date(paymentDate),
+      description,
+      allocations: finalAllocations
+    });
+
+    await logAction(req.user!, 'Payment', payment._id, 'create', null, {
+      tenantId,
+      amount,
+      paymentMethod,
+      paymentDate,
+      allocations: finalAllocations
+    });
+
+    res.status(201).json({
+      message: 'Payment recorded successfully',
+      payment
+    });
   } catch (error: any) {
     console.error('Record payment error:', error);
     res.status(500).json({ 
@@ -693,6 +769,201 @@ export const getTenantProfile = async (req: AuthRequest, res: Response): Promise
     });
   } catch (error: any) {
     console.error('Get tenant profile error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Update tenant active status
+export const updateTenantStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenantId } = req.params;
+    const { isActive } = req.body;
+
+    const user = await User.findById(tenantId);
+    
+    if (!user) {
+      res.status(404).json({ message: 'Tenant not found' });
+      return;
+    }
+
+    const oldStatus = user.isActive;
+    user.isActive = isActive;
+    await user.save();
+
+    // If making inactive, end all active tenancies
+    if (!isActive) {
+      await Tenancy.updateMany(
+        { tenantId: user._id, isActive: true },
+        { 
+          isActive: false,
+          endDate: new Date()
+        }
+      );
+    }
+
+    await logAction(req.user!, 'User', user._id, 'update',
+      { isActive: oldStatus },
+      { isActive });
+
+    res.json({
+      message: 'Tenant status updated successfully',
+      user
+    });
+  } catch (error: any) {
+    console.error('Update tenant status error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// EB Bill Management
+export const createOrUpdateEBBill = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { roomId, amount, period } = req.body;
+
+    if (!roomId || amount === undefined || !period) {
+      res.status(400).json({ message: 'Missing required fields: roomId, amount, period' });
+      return;
+    }
+
+    // Check if EB bill exists for this room and period
+    const existingBill = await RoomEBBill.findOne({ roomId, period });
+
+    let ebBill;
+    if (existingBill) {
+      existingBill.amount = amount;
+      ebBill = await existingBill.save();
+      await logAction(req.user!, 'RoomEBBill', ebBill._id, 'update', { amount: existingBill.amount }, { amount });
+    } else {
+      ebBill = new RoomEBBill({ roomId, amount, period });
+      await ebBill.save();
+      await logAction(req.user!, 'RoomEBBill', ebBill._id, 'create', null, { roomId, amount, period });
+    }
+
+    res.json({
+      message: 'EB Bill created/updated successfully',
+      ebBill
+    });
+  } catch (error: any) {
+    console.error('Create/Update EB Bill error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+export const getRoomEBBills = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { roomId, period } = req.query;
+
+    const query: any = {};
+    if (roomId) query.roomId = roomId;
+    if (period) query.period = period;
+
+    const ebBills = await RoomEBBill.find(query)
+      .populate('roomId', 'roomNumber hostelId')
+      .sort({ period: -1 });
+
+    res.json({ ebBills });
+  } catch (error: any) {
+    console.error('Get room EB Bills error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Update rent payment status
+export const updateRentPaymentStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { rentId } = req.params;
+    const { isPaidInFull } = req.body;
+
+    const rent = await MonthlyRent.findById(rentId);
+    
+    if (!rent) {
+      res.status(404).json({ message: 'Rent not found' });
+      return;
+    }
+
+    const oldValue = rent.isPaidInFull;
+    rent.isPaidInFull = isPaidInFull;
+    
+    // Update status based on payment
+    if (isPaidInFull && rent.amountPaid >= rent.amount) {
+      rent.status = 'paid';
+    } else if (rent.amountPaid > 0 && rent.amountPaid < rent.amount) {
+      rent.status = 'partial';
+    } else {
+      rent.status = 'due';
+    }
+
+    await rent.save();
+    
+    await logAction(req.user!, 'MonthlyRent', rent._id, 'update', 
+      { isPaidInFull: oldValue, status: rent.status }, 
+      { isPaidInFull, status: rent.status });
+
+    res.json({
+      message: 'Rent payment status updated successfully',
+      rent
+    });
+  } catch (error: any) {
+    console.error('Update rent payment status error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Get dashboard stats
+export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    // Get total hostels
+    const totalHostels = await Hostel.countDocuments({ isActive: true });
+    
+    // Get total active tenants
+    const totalTenants = await Tenancy.countDocuments({ isActive: true });
+    
+    // Calculate monthly revenue (sum of all tenant shares for current month)
+    const currentDate = new Date();
+    const currentPeriod = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}`;
+    
+    const activeTenancies = await Tenancy.find({ isActive: true })
+      .populate('tenantId', 'firstName lastName')
+      .populate('roomId', 'roomNumber capacity rentAmount hostelId')
+      .populate('roomId.hostelId', 'name address');
+    
+    let monthlyRevenue = 0;
+    activeTenancies.forEach((tenancy: any) => {
+      monthlyRevenue += tenancy.tenantShare || 0;
+    });
+    
+    // Calculate total room capacity
+    const rooms = await Room.find({ isActive: true });
+    const totalCapacity = rooms.reduce((sum, room) => sum + room.capacity, 0);
+    
+    // Calculate occupancy rate
+    const occupancyRate = totalCapacity > 0 ? ((totalTenants / totalCapacity) * 100).toFixed(1) : '0';
+    
+    res.json({
+      totalHostels,
+      totalTenants,
+      monthlyRevenue: monthlyRevenue.toFixed(2),
+      occupancyRate: `${occupancyRate}%`,
+      totalRooms: rooms.length,
+      totalCapacity
+    });
+  } catch (error: any) {
+    console.error('Get dashboard stats error:', error);
     res.status(500).json({ 
       message: error.message || 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined

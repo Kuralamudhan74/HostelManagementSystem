@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, ArrowLeft, Plus, Users, CheckCircle, Search } from 'lucide-react';
+import { Building2, ArrowLeft, Plus, Users, CheckCircle, Search, Trash2, Zap, DollarSign, AirVent, Bath } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -35,7 +35,10 @@ const RoomsPage: React.FC = () => {
   const [isAddRoomModalOpen, setIsAddRoomModalOpen] = useState(false);
   const [isAssignTenantModalOpen, setIsAssignTenantModalOpen] = useState(false);
   const [isReassignConfirmModalOpen, setIsReassignConfirmModalOpen] = useState(false);
+  const [isDeleteRoomModalOpen, setIsDeleteRoomModalOpen] = useState(false);
+  const [isEBBillModalOpen, setIsEBBillModalOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
+  const [ebBillAmount, setEbBillAmount] = useState('');
   const [tenantSearch, setTenantSearch] = useState('');
   const [pendingAssignmentData, setPendingAssignmentData] = useState<any>(null);
   const [selectedHostelFilter, setSelectedHostelFilter] = useState<string>('');
@@ -64,6 +67,12 @@ const RoomsPage: React.FC = () => {
   const { data: tenantsData } = useQuery({
     queryKey: ['tenants'],
     queryFn: () => apiClient.getTenants({ limit: 100, includeUnassigned: true }),
+  });
+
+  // Fetch EB bills for rooms
+  const { data: ebBillsData } = useQuery({
+    queryKey: ['eb-bills'],
+    queryFn: () => apiClient.getRoomEBBills(),
   });
 
   const handleAddRoom = async (data: any) => {
@@ -157,6 +166,79 @@ const RoomsPage: React.FC = () => {
   const handleAssignClick = (room: any) => {
     setSelectedRoom(room);
     setIsAssignTenantModalOpen(true);
+  };
+
+  const handleDeleteClick = (room: any) => {
+    setSelectedRoom(room);
+    setIsDeleteRoomModalOpen(true);
+  };
+
+  const handleDeleteRoom = async () => {
+    if (!selectedRoom) return;
+    
+    try {
+      const response = await fetch(`/api/admin/rooms/${selectedRoom.id || selectedRoom._id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Failed to delete room');
+        return;
+      }
+      
+      toast.success('Room deleted successfully');
+      setIsDeleteRoomModalOpen(false);
+      setSelectedRoom(null);
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    } catch (error: any) {
+      console.error('Delete room error:', error);
+      toast.error('Failed to delete room');
+    }
+  };
+
+  const handleEBBillClick = (room: any) => {
+    setSelectedRoom(room);
+    // Get current month EB bill if exists
+    const currentDate = new Date();
+    const currentPeriod = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+    const existingBill = ebBillsData?.ebBills?.find((bill: any) => 
+      bill.roomId?._id === room._id && bill.period === currentPeriod
+    );
+    setEbBillAmount(existingBill?.amount?.toString() || '');
+    setIsEBBillModalOpen(true);
+  };
+
+  const handleUpdateEBBill = async () => {
+    if (!selectedRoom || !ebBillAmount) {
+      toast.error('Please enter EB bill amount');
+      return;
+    }
+
+    try {
+      const currentDate = new Date();
+      const currentPeriod = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      await apiClient.createOrUpdateEBBill({
+        roomId: selectedRoom.id || selectedRoom._id,
+        amount: parseFloat(ebBillAmount),
+        period: currentPeriod
+      });
+
+      toast.success('EB Bill updated successfully');
+      setIsEBBillModalOpen(false);
+      setSelectedRoom(null);
+      setEbBillAmount('');
+      queryClient.invalidateQueries({ queryKey: ['eb-bills'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant-dues'] });
+    } catch (error: any) {
+      console.error('Update EB bill error:', error);
+      toast.error(error.response?.data?.message || 'Failed to update EB bill');
+    }
   };
 
   const allRooms = roomsData?.rooms || [];
@@ -344,6 +426,39 @@ const RoomsPage: React.FC = () => {
                         {availableCapacity} bed{availableCapacity !== 1 ? 's' : ''}
                       </span>
                     </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Features</span>
+                      <div className="flex items-center gap-3">
+                        {room.isAC && (
+                          <span className="flex items-center gap-1 text-blue-600" title="AC">
+                            <AirVent className="w-4 h-4" />
+                            <span className="text-xs">AC</span>
+                          </span>
+                        )}
+                        {room.bathroomAttached && (
+                          <span className="flex items-center gap-1 text-green-600" title="Bathroom Attached">
+                            <Bath className="w-4 h-4" />
+                            <span className="text-xs">Bath</span>
+                          </span>
+                        )}
+                        {!room.isAC && !room.bathroomAttached && (
+                          <span className="text-gray-400 text-xs">No special features</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Current EB Bill</span>
+                      <span className="font-medium">
+                        ${(() => {
+                          const currentDate = new Date();
+                          const currentPeriod = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+                          const currentBill = ebBillsData?.ebBills?.find((bill: any) => 
+                            bill.roomId?._id === room._id && bill.period === currentPeriod
+                          );
+                          return currentBill ? currentBill.amount.toFixed(2) : '0.00';
+                        })()}
+                      </span>
+                    </div>
                   </div>
 
                   {currentTenants.length > 0 && (
@@ -365,7 +480,7 @@ const RoomsPage: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="pt-4 border-t border-gray-200">
+                  <div className="pt-4 border-t border-gray-200 space-y-2">
                     {availableCapacity > 0 ? (
                       <Button
                         variant="primary"
@@ -385,6 +500,26 @@ const RoomsPage: React.FC = () => {
                       >
                         <CheckCircle className="w-4 h-4 mr-2" />
                         Room Full
+                      </Button>
+                    )}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={() => handleEBBillClick(room)}
+                    >
+                      <Zap className="w-4 h-4 mr-2" />
+                      Update EB Bill
+                    </Button>
+                    {currentTenants.length === 0 && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleDeleteClick(room)}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Room
                       </Button>
                     )}
                   </div>
@@ -701,6 +836,113 @@ const RoomsPage: React.FC = () => {
               variant="primary"
             >
               Yes, Reassign to New Room
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Room Confirmation Modal */}
+      <Modal
+        isOpen={isDeleteRoomModalOpen}
+        onClose={() => {
+          setIsDeleteRoomModalOpen(false);
+          setSelectedRoom(null);
+        }}
+        title="Delete Room"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-700">
+            Are you sure you want to delete room <strong>{selectedRoom?.roomNumber}</strong>?
+          </p>
+          {selectedRoom && getAvailableCapacity(selectedRoom) === selectedRoom.capacity && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-4">
+              <p className="text-sm text-red-800">
+                This room has no tenants and will be permanently deleted. This action cannot be undone.
+              </p>
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsDeleteRoomModalOpen(false);
+                setSelectedRoom(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteRoom}
+              variant="primary"
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete Room
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* EB Bill Modal */}
+      <Modal
+        isOpen={isEBBillModalOpen}
+        onClose={() => {
+          setIsEBBillModalOpen(false);
+          setSelectedRoom(null);
+          setEbBillAmount('');
+        }}
+        title="Update EB Bill"
+      >
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+            <p className="text-sm text-blue-800">
+              Room: <strong>{selectedRoom?.roomNumber}</strong>
+            </p>
+            <p className="text-sm text-blue-800 mt-1">
+              Current Month: <strong>{new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}</strong>
+            </p>
+            {selectedRoom && getTenantsForRoom(selectedRoom.id).length > 0 && (
+              <p className="text-sm text-blue-800 mt-2">
+                Active Tenants: <strong>{getTenantsForRoom(selectedRoom.id).length}</strong> 
+                <span className="text-xs ml-2">
+                  (EB will be divided equally: ${ebBillAmount ? (parseFloat(ebBillAmount) / getTenantsForRoom(selectedRoom.id).length).toFixed(2) : '0.00'} per tenant)
+                </span>
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Total EB Bill Amount *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={ebBillAmount}
+              onChange={(e) => setEbBillAmount(e.target.value)}
+              placeholder="Enter EB bill amount"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              This amount will be divided equally among all active tenants in this room.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsEBBillModalOpen(false);
+                setSelectedRoom(null);
+                setEbBillAmount('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateEBBill}
+              variant="primary"
+            >
+              Update EB Bill
             </Button>
           </div>
         </div>

@@ -124,6 +124,24 @@ const roomSchema = new Schema<IRoom>({
   timestamps: true
 });
 
+// Room EB Bill Schema (Monthly electricity bill per room)
+export interface IRoomEBBill extends Document {
+  _id: string;
+  roomId: mongoose.Types.ObjectId;
+  amount: number;
+  period: string; // YYYY-MM format
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const roomEBBillSchema = new Schema<IRoomEBBill>({
+  roomId: { type: Schema.Types.ObjectId, ref: 'Room', required: true },
+  amount: { type: Number, required: true },
+  period: { type: String, required: true } // YYYY-MM
+}, {
+  timestamps: true
+});
+
 // Tenancy Schema (junction table for room-tenant relationship)
 export interface ITenancy extends Document {
   _id: string;
@@ -162,6 +180,7 @@ export interface IMonthlyRent extends Document {
   dueDate: Date;
   period: string; // YYYY-MM format
   lateFee?: number;
+  isPaidInFull: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -173,7 +192,8 @@ const monthlyRentSchema = new Schema<IMonthlyRent>({
   status: { type: String, enum: ['due', 'partial', 'paid'], default: 'due' },
   dueDate: { type: Date, required: true },
   period: { type: String, required: true }, // YYYY-MM
-  lateFee: { type: Number, default: 0 }
+  lateFee: { type: Number, default: 0 },
+  isPaidInFull: { type: Boolean, default: false }
 }, {
   timestamps: true
 });
@@ -390,6 +410,7 @@ export const User = mongoose.model<IUser>('User', userSchema);
 export const Owner = mongoose.model<IOwner>('Owner', ownerSchema);
 export const Hostel = mongoose.model<IHostel>('Hostel', hostelSchema);
 export const Room = mongoose.model<IRoom>('Room', roomSchema);
+export const RoomEBBill = mongoose.model<IRoomEBBill>('RoomEBBill', roomEBBillSchema);
 export const Tenancy = mongoose.model<ITenancy>('Tenancy', tenancySchema);
 export const MonthlyRent = mongoose.model<IMonthlyRent>('MonthlyRent', monthlyRentSchema);
 export const Bill = mongoose.model<IBill>('Bill', billSchema);

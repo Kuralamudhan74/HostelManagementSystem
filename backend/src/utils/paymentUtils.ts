@@ -1,4 +1,4 @@
-import { MonthlyRent, Bill, Payment, PaymentAllocation } from '../models';
+import { MonthlyRent, Bill, Payment, PaymentAllocation, RoomEBBill, Tenancy } from '../models';
 
 export interface PaymentAllocationData {
   dueId: string;
@@ -42,71 +42,65 @@ export const calculateOutstandingBalance = async (tenantId: string): Promise<num
 
 // Record payment with allocations
 export const recordPaymentWithAllocations = async (data: PaymentRecordData) => {
-  const session = await Payment.startSession();
-  let payment: any;
-  
   try {
-    await session.withTransaction(async () => {
-      // Create payment record
-      payment = new Payment({
-        tenantId: data.tenantId,
-        amount: data.amount,
-        paymentMethod: data.paymentMethod,
-        paymentDate: data.paymentDate,
-        description: data.description
-      });
-
-      await payment.save({ session });
-
-      // Process allocations
-      for (const allocation of data.allocations) {
-        const allocationRecord = new PaymentAllocation({
-          paymentId: payment._id,
-          dueId: allocation.dueId,
-          dueType: allocation.dueType,
-          allocatedAmount: allocation.amount
-        });
-
-        await allocationRecord.save({ session });
-
-        // Update the due record
-        if (allocation.dueType === 'rent') {
-          const rent = await MonthlyRent.findById(allocation.dueId).session(session);
-          if (rent) {
-            const newAmountPaid = rent.amountPaid + allocation.amount;
-            const newStatus = newAmountPaid >= rent.amount ? 'paid' : 'partial';
-            
-            await MonthlyRent.findByIdAndUpdate(
-              allocation.dueId,
-              {
-                amountPaid: newAmountPaid,
-                status: newStatus
-              },
-              { session }
-            );
-          }
-        } else if (allocation.dueType === 'bill') {
-          const bill = await Bill.findById(allocation.dueId).session(session);
-          if (bill) {
-            const newAmountPaid = bill.amountPaid + allocation.amount;
-            const newStatus = newAmountPaid >= bill.amount ? 'paid' : 'partial';
-            
-            await Bill.findByIdAndUpdate(
-              allocation.dueId,
-              {
-                amountPaid: newAmountPaid,
-                status: newStatus
-              },
-              { session }
-            );
-          }
-        }
-      }
+    // Create payment record
+    const payment = new Payment({
+      tenantId: data.tenantId,
+      amount: data.amount,
+      paymentMethod: data.paymentMethod,
+      paymentDate: data.paymentDate,
+      description: data.description
     });
 
+    await payment.save();
+
+    // Process allocations
+    for (const allocation of data.allocations) {
+      const allocationRecord = new PaymentAllocation({
+        paymentId: payment._id,
+        dueId: allocation.dueId,
+        dueType: allocation.dueType,
+        allocatedAmount: allocation.amount
+      });
+
+      await allocationRecord.save();
+
+      // Update the due record
+      if (allocation.dueType === 'rent') {
+        const rent = await MonthlyRent.findById(allocation.dueId);
+        if (rent) {
+          const newAmountPaid = rent.amountPaid + allocation.amount;
+          const newStatus = newAmountPaid >= rent.amount ? 'paid' : 'partial';
+          
+          await MonthlyRent.findByIdAndUpdate(
+            allocation.dueId,
+            {
+              amountPaid: newAmountPaid,
+              status: newStatus
+            }
+          );
+        }
+      } else if (allocation.dueType === 'bill') {
+        const bill = await Bill.findById(allocation.dueId);
+        if (bill) {
+          const newAmountPaid = bill.amountPaid + allocation.amount;
+          const newStatus = newAmountPaid >= bill.amount ? 'paid' : 'partial';
+          
+          await Bill.findByIdAndUpdate(
+            allocation.dueId,
+            {
+              amountPaid: newAmountPaid,
+              status: newStatus
+            }
+          );
+        }
+      }
+    }
+
     return payment;
-  } finally {
-    await session.endSession();
+  } catch (error) {
+    console.error('Error recording payment with allocations:', error);
+    throw error;
   }
 };
 
@@ -118,7 +112,7 @@ export const getPaymentHistory = async (tenantId: string, limit: number = 50) =>
     .limit(limit);
 };
 
-// Get dues for a tenant (rents and bills)
+// Get dues for a tenant (rents, bills, and EB bills)
 export const getTenantDues = async (tenantId: string, month?: string) => {
   const query: any = {
     'tenancy.tenantId': tenantId,
@@ -135,9 +129,44 @@ export const getTenantDues = async (tenantId: string, month?: string) => {
     status: { $in: ['due', 'partial'] }
   }).populate('tenancy');
 
+  // Get active tenancy to find the room
+  const activeTenancy = await Tenancy.findOne({ tenantId, isActive: true }).populate('roomId');
+  
+  let ebBill = null;
+  let tenantEbAmount = 0;
+  
+  if (activeTenancy && activeTenancy.roomId) {
+    const period = month || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const roomEBBill = await RoomEBBill.findOne({ 
+      roomId: activeTenancy.roomId._id, 
+      period 
+    }).populate('roomId');
+    
+    if (roomEBBill) {
+      // Count number of active tenants in this room
+      const activeTenantsCount = await Tenancy.countDocuments({
+        roomId: activeTenancy.roomId._id,
+        isActive: true
+      });
+      
+      // Divide EB bill equally among all active tenants in the room
+      tenantEbAmount = roomEBBill.amount / activeTenantsCount;
+      
+      // Create a copy of the bill with tenant's share
+      ebBill = {
+        ...roomEBBill.toObject(),
+        amount: tenantEbAmount,
+        totalRoomEB: roomEBBill.amount,
+        roommatesCount: activeTenantsCount
+      };
+    }
+  }
+
   return {
     rents,
     bills,
+    ebBill,
+    tenantEbAmount,
     totalOutstanding: await calculateOutstandingBalance(tenantId)
   };
 };

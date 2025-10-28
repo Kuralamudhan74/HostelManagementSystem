@@ -225,7 +225,7 @@ class ApiClient {
   }
 
   // Tenant endpoints
-  async getMyDues(month?: string): Promise<{ dues: any; paymentHistory: any[] }> {
+  async getMyDues(month?: string): Promise<{ dues: any; paymentHistory: any[]; currentRent?: any }> {
     const params = month ? { month } : {};
     const response = await this.client.get('/me/dues', { params });
     return response.data;
@@ -298,6 +298,35 @@ class ApiClient {
     const response = await this.client.get('/me/attachments', {
       params: { page, limit }
     });
+    return response.data;
+  }
+
+  // Dashboard stats
+  async getDashboardStats(): Promise<any> {
+    const response = await this.client.get('/admin/dashboard/stats');
+    return response.data;
+  }
+
+  // EB Bill management
+  async createOrUpdateEBBill(data: { roomId: string; amount: number; period: string }): Promise<any> {
+    const response = await this.client.post('/admin/eb-bills', data);
+    return response.data;
+  }
+
+  async getRoomEBBills(params?: { roomId?: string; period?: string }): Promise<{ ebBills: any[] }> {
+    const response = await this.client.get('/admin/eb-bills', { params });
+    return response.data;
+  }
+
+  // Update rent payment status
+  async updateRentPaymentStatus(rentId: string, isPaidInFull: boolean): Promise<any> {
+    const response = await this.client.patch(`/admin/rents/${rentId}/payment-status`, { isPaidInFull });
+    return response.data;
+  }
+
+  // Update tenant status
+  async updateTenantStatus(tenantId: string, isActive: boolean): Promise<any> {
+    const response = await this.client.patch(`/admin/tenants/${tenantId}/status`, { isActive });
     return response.data;
   }
 }

@@ -9,7 +9,8 @@ import {
   FileText,
   Settings,
   Plus,
-  Trash2
+  Trash2,
+  User
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import apiClient from '../../services/api';
@@ -17,10 +18,12 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 const AdminDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [isAddHostelModalOpen, setIsAddHostelModalOpen] = useState(false);
   const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
@@ -36,6 +39,11 @@ const AdminDashboard: React.FC = () => {
   const { data: tenants } = useQuery({
     queryKey: ['tenants-full'],
     queryFn: () => apiClient.getTenants({ includeUnassigned: true, limit: 1000 }),
+  });
+
+  const { data: dashboardStats } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => apiClient.getDashboardStats(),
   });
 
   // Create hostel mutation
@@ -133,13 +141,13 @@ const AdminDashboard: React.FC = () => {
     },
     {
       title: 'Monthly Revenue',
-      value: '$12,500',
+      value: `$${dashboardStats?.monthlyRevenue || '0.00'}`,
       icon: DollarSign,
       color: 'bg-yellow-500',
     },
     {
       title: 'Occupancy Rate',
-      value: '85%',
+      value: dashboardStats?.occupancyRate || '0%',
       icon: TrendingUp,
       color: 'bg-purple-500',
     },
@@ -193,6 +201,13 @@ const AdminDashboard: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center space-x-4">
+              <button 
+                onClick={() => navigate('/profile')}
+                className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                <User className="w-4 h-4 mr-2" />
+                Profile
+              </button>
               <button className="p-2 text-gray-400 hover:text-gray-600">
                 <Settings className="w-5 h-5" />
               </button>

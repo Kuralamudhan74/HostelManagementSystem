@@ -8,22 +8,26 @@ import {
   FileText,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  User
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import apiClient from '../../services/api';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import { useNavigate } from 'react-router-dom';
+import FareBreakdown from '../../components/FareBreakdown';
 
 const TenantDashboard: React.FC = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['tenant-dashboard'],
     queryFn: () => apiClient.getMyDashboard(),
   });
 
-  const { data: dues, isLoading: duesLoading } = useQuery({
+  const { data: duesData, isLoading: duesLoading } = useQuery({
     queryKey: ['tenant-dues'],
     queryFn: () => apiClient.getMyDues(),
   });
@@ -33,9 +37,8 @@ const TenantDashboard: React.FC = () => {
   }
 
   const tenancy = dashboardData?.tenancy;
-  const duesData = dues?.dues;
   const recentPayments = dashboardData?.recentPayments || [];
-  const currentRent = dashboardData?.currentRent;
+  const currentRent = duesData?.currentRent;
 
   const stats = [
     {
@@ -52,7 +55,7 @@ const TenantDashboard: React.FC = () => {
     },
     {
       title: 'Outstanding Balance',
-      value: formatCurrency(duesData?.totalOutstanding || 0),
+      value: formatCurrency(duesData?.dues?.totalOutstanding || 0),
       icon: AlertCircle,
       color: 'bg-red-500',
     },
@@ -76,12 +79,21 @@ const TenantDashboard: React.FC = () => {
                 Welcome back, {user?.firstName} {user?.lastName}
               </p>
             </div>
-            <button
-              onClick={logout}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-            >
-              Logout
-            </button>
+            <div className="flex items-center space-x-3">
+              <button 
+                onClick={() => navigate('/profile')}
+                className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                <User className="w-4 h-4 mr-2" />
+                Profile
+              </button>
+              <button
+                onClick={logout}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -115,44 +127,31 @@ const TenantDashboard: React.FC = () => {
           ))}
         </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Current Rent Status */}
+        {/* Fare Breakdown Component */}
+        {duesData?.currentRent && (
           <motion.div
-            className="bg-white rounded-lg shadow-sm p-6"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.3 }}
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Rent Status</h3>
-            {currentRent ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Period</span>
-                  <span className="font-medium">{currentRent.period}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Amount Due</span>
-                  <span className="font-medium">{formatCurrency(currentRent.amount)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Amount Paid</span>
-                  <span className="font-medium">{formatCurrency(currentRent.amountPaid)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Status</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(currentRent.status)}`}>
-                    {currentRent.status}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Due Date</span>
-                  <span className="font-medium">{formatDate(currentRent.dueDate)}</span>
-                </div>
-              </div>
-            ) : (
-              <p className="text-gray-500">No current rent information available</p>
-            )}
+            <FareBreakdown
+              monthlyRent={duesData.currentRent.amount || 0}
+              ebBillShare={duesData.currentRent.ebShare || duesData.dues?.ebBill?.amount || 0}
+              amountPaid={duesData.currentRent.amountPaid || 0}
+              status={(() => {
+                const totalDue = (duesData.currentRent.amount || 0) + (duesData.currentRent.ebShare || duesData.dues?.ebBill?.amount || 0);
+                const paid = duesData.currentRent.amountPaid || 0;
+                if (paid >= totalDue) return 'paid';
+                if (paid > 0) return 'partial';
+                return 'due';
+              })()}
+              totalRoomEB={duesData.dues?.ebBill?.totalRoomEB}
+              roommatesCount={duesData.dues?.ebBill?.roommatesCount}
+            />
           </motion.div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
           {/* Outstanding Dues */}
           <motion.div
@@ -163,7 +162,7 @@ const TenantDashboard: React.FC = () => {
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Outstanding Dues</h3>
             <div className="space-y-3">
-              {duesData?.rents?.slice(0, 3).map((rent: any) => (
+              {duesData?.dues?.rents?.slice(0, 3).map((rent: any) => (
                 <div key={rent.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
                   <div className="flex items-center">
                     <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
@@ -184,7 +183,7 @@ const TenantDashboard: React.FC = () => {
                   </div>
                 </div>
               ))}
-              {duesData?.bills?.slice(0, 2).map((bill: any) => (
+              {duesData?.dues?.bills?.slice(0, 2).map((bill: any) => (
                 <div key={bill.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
                   <div className="flex items-center">
                     <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
@@ -205,7 +204,7 @@ const TenantDashboard: React.FC = () => {
                   </div>
                 </div>
               ))}
-              {(!duesData?.rents?.length && !duesData?.bills?.length) && (
+              {(!duesData?.dues?.rents?.length && !duesData?.dues?.bills?.length) && (
                 <div className="text-center py-4">
                   <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
                   <p className="text-sm text-gray-500">No outstanding dues</p>

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ArrowLeft, Plus, Search, MapPin, Phone, Mail, X, Eye } from 'lucide-react';
+import { Users, ArrowLeft, Plus, Search, MapPin, Phone, Mail, X, Eye, Power } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -88,6 +88,27 @@ const TenantsPage: React.FC = () => {
       toast.error(error.response?.data?.message || 'Failed to unassign tenant');
     },
   });
+
+  // Update tenant status mutation
+  const updateTenantStatusMutation = useMutation({
+    mutationFn: ({ tenantId, isActive }: { tenantId: string; isActive: boolean }) =>
+      apiClient.updateTenantStatus(tenantId, isActive),
+    onSuccess: () => {
+      toast.success('Tenant status updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update tenant status');
+    },
+  });
+
+  const handleToggleStatus = (tenant: any, currentStatus: boolean) => {
+    updateTenantStatusMutation.mutate({
+      tenantId: tenant._id || tenant.id,
+      isActive: !currentStatus
+    });
+  };
 
   const handleAddTenant = (data: any) => {
     createTenantMutation.mutate({
@@ -324,6 +345,15 @@ const TenantsPage: React.FC = () => {
                       variant="secondary"
                       size="sm"
                       className="flex-1"
+                      onClick={() => handleToggleStatus(tenancy.tenantId, tenancy.tenantId?.isActive !== false)}
+                    >
+                      <Power className="w-4 h-4 mr-2" />
+                      {tenancy.tenantId?.isActive !== false ? 'Deactivate' : 'Activate'}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="flex-1"
                       onClick={() => handleUnassignClick(tenancy)}
                     >
                       <X className="w-4 h-4 mr-2" />
@@ -386,6 +416,15 @@ const TenantsPage: React.FC = () => {
                   >
                     <Eye className="w-4 h-4 mr-2" />
                     View Profile
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full mb-2"
+                    onClick={() => handleToggleStatus(tenant, tenant.isActive !== false)}
+                  >
+                    <Power className="w-4 h-4 mr-2" />
+                    {tenant.isActive !== false ? 'Deactivate' : 'Activate'}
                   </Button>
                   <Button
                     variant="secondary"
