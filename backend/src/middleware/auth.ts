@@ -97,22 +97,3 @@ export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction
   next();
 };
 
-// Tenant authorization middleware
-export const requireTenant = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  console.log('requireTenant check:', { hasUser: !!req.user, userRole: req.user?.role });
-  
-  if (!req.user) {
-    console.error('No user in requireTenant');
-    res.status(403).json({ message: 'Authentication required' });
-    return;
-  }
-  
-  if (req.user.role !== 'tenant') {
-    console.error('User role is not tenant:', req.user.role);
-    res.status(403).json({ message: 'Tenant access required' });
-    return;
-  }
-  
-  console.log('Tenant access granted for:', req.user.email);
-  next();
-};

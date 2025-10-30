@@ -36,15 +36,7 @@ import {
   recordPaymentSchema,
   createExpenseSchema
 } from '../controllers/adminController';
-import { 
-  getMyDues,
-  getMyTenancy,
-  getMyPaymentHistory,
-  getMyRentHistory,
-  getMyBillHistory,
-  getMyDashboard
-} from '../controllers/tenantController';
-import { 
+import {
   uploadAttachment,
   downloadAttachment,
   getAttachmentInfo,
@@ -52,11 +44,28 @@ import {
   getMyAttachments,
   uploadAttachmentSchema
 } from '../controllers/attachmentController';
-import { authenticate, requireAdmin, requireTenant } from '../middleware/auth';
+import { importTenantsFromCSV } from '../controllers/importController';
+import { authenticate, requireAdmin } from '../middleware/auth';
 import { validate } from '../middleware/validation';
 import { upload } from '../controllers/attachmentController';
+import multer from 'multer';
 
 const router = Router();
+
+// Multer configuration for CSV upload
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
 
 // Authentication routes
 router.post('/auth/login', validate(loginSchema), login);
@@ -98,6 +107,13 @@ router.patch('/admin/tenants/:tenantId/status', authenticate, requireAdmin, asyn
   const { updateTenantStatus } = await import('../controllers/adminController');
   return updateTenantStatus(req as any, res);
 });
+router.delete('/admin/tenants/:tenantId', authenticate, requireAdmin, async (req, res, next) => {
+  const { deleteTenant } = await import('../controllers/adminController');
+  return deleteTenant(req as any, res);
+});
+
+// Tenant CSV import route
+router.post('/admin/tenants/import-csv', authenticate, requireAdmin, csvUpload.single('file'), importTenantsFromCSV);
 
 router.post('/admin/payments', authenticate, requireAdmin, validate(recordPaymentSchema), recordPayment);
 router.get('/admin/payments', authenticate, requireAdmin, getPayments);
@@ -114,14 +130,6 @@ router.get('/admin/eb-bills', authenticate, requireAdmin, getRoomEBBills);
 
 // Rent status routes
 router.patch('/admin/rents/:rentId/payment-status', authenticate, requireAdmin, updateRentPaymentStatus);
-
-// Tenant routes
-router.get('/me/dues', authenticate, requireTenant, getMyDues);
-router.get('/me/tenancy', authenticate, requireTenant, getMyTenancy);
-router.get('/me/payments', authenticate, requireTenant, getMyPaymentHistory);
-router.get('/me/rents', authenticate, requireTenant, getMyRentHistory);
-router.get('/me/bills', authenticate, requireTenant, getMyBillHistory);
-router.get('/me/dashboard', authenticate, requireTenant, getMyDashboard);
 
 // Attachment routes
 router.post('/attachments', authenticate, upload.single('file'), validate(uploadAttachmentSchema), uploadAttachment);

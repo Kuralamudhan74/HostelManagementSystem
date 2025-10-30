@@ -821,6 +821,58 @@ export const updateTenantStatus = async (req: AuthRequest, res: Response): Promi
   }
 };
 
+// Delete tenant (soft delete)
+export const deleteTenant = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenantId } = req.params;
+
+    const user = await User.findById(tenantId);
+
+    if (!user) {
+      res.status(404).json({ message: 'Tenant not found' });
+      return;
+    }
+
+    if (user.role !== 'tenant') {
+      res.status(400).json({ message: 'Can only delete tenant users' });
+      return;
+    }
+
+    const oldStatus = user.isActive;
+
+    // Soft delete - set isActive to false
+    user.isActive = false;
+    await user.save();
+
+    // End all active tenancies automatically
+    const activeTenancies = await Tenancy.find({ tenantId: user._id, isActive: true });
+
+    for (const tenancy of activeTenancies) {
+      tenancy.isActive = false;
+      tenancy.endDate = new Date();
+      await tenancy.save();
+
+      console.log(`Ended tenancy ${tenancy._id} for deleted tenant ${user.firstName} ${user.lastName}`);
+    }
+
+    // Log the deletion
+    await logAction(req.user!, 'User', user._id, 'delete',
+      { isActive: oldStatus },
+      { isActive: false, deletedAt: new Date() });
+
+    res.json({
+      message: `Tenant ${user.firstName} ${user.lastName} deleted successfully`,
+      tenanciesEnded: activeTenancies.length
+    });
+  } catch (error: any) {
+    console.error('Delete tenant error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 // EB Bill Management
 export const createOrUpdateEBBill = async (req: AuthRequest, res: Response): Promise<void> => {
   try {

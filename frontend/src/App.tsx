@@ -3,7 +3,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
-import TenantDashboard from './pages/tenant/TenantDashboard';
 import RoomsPage from './pages/admin/RoomsPage';
 import TenantsPage from './pages/admin/TenantsPage';
 import PaymentsPage from './pages/admin/PaymentsPage';
@@ -45,7 +44,7 @@ const AppRoutes: React.FC = () => {
       
       <Route path="/" element={
         <ProtectedRoute>
-          {user?.role === 'admin' ? <AdminDashboard /> : <TenantDashboard />}
+          {user?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/login" replace />}
         </ProtectedRoute>
       } />
 
@@ -71,13 +70,6 @@ const AppRoutes: React.FC = () => {
       <Route path="/admin/expenses" element={
         <ProtectedRoute requiredRole="admin">
           <ExpensesPage />
-        </ProtectedRoute>
-      } />
-
-      {/* Tenant Routes */}
-      <Route path="/tenant/dashboard" element={
-        <ProtectedRoute requiredRole="tenant">
-          <TenantDashboard />
         </ProtectedRoute>
       } />
 

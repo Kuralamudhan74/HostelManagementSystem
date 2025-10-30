@@ -168,6 +168,28 @@ class ApiClient {
     return response.data;
   }
 
+  async importTenantsFromCSV(file: File): Promise<{
+    message: string;
+    success: number;
+    failed: number;
+    errors: Array<{ row: number; email?: string; reason: string }>;
+    createdTenants: Array<{ email: string; password: string; firstName: string; lastName: string }>;
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await this.client.post('/admin/tenants/import-csv', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  }
+
+  async deleteTenant(tenantId: string): Promise<{ message: string; tenanciesEnded: number }> {
+    const response = await this.client.delete(`/admin/tenants/${tenantId}`);
+    return response.data;
+  }
+
   async recordPayment(data: PaymentForm): Promise<any> {
     const response = await this.client.post('/admin/payments', data);
     return response.data;
@@ -221,44 +243,6 @@ class ApiClient {
     limit?: number;
   }): Promise<{ expenses: any[]; pagination: any }> {
     const response = await this.client.get('/admin/expenses', { params });
-    return response.data;
-  }
-
-  // Tenant endpoints
-  async getMyDues(month?: string): Promise<{ dues: any; paymentHistory: any[]; currentRent?: any }> {
-    const params = month ? { month } : {};
-    const response = await this.client.get('/me/dues', { params });
-    return response.data;
-  }
-
-  async getMyTenancy(): Promise<{ tenancy: any }> {
-    const response = await this.client.get('/me/tenancy');
-    return response.data;
-  }
-
-  async getMyPaymentHistory(page = 1, limit = 10): Promise<{ payments: any[] }> {
-    const response = await this.client.get('/me/payments', {
-      params: { page, limit }
-    });
-    return response.data;
-  }
-
-  async getMyRentHistory(year?: string, month?: string): Promise<{ rents: any[] }> {
-    const params: any = {};
-    if (year) params.year = year;
-    if (month) params.month = month;
-    
-    const response = await this.client.get('/me/rents', { params });
-    return response.data;
-  }
-
-  async getMyBillHistory(): Promise<{ bills: any[] }> {
-    const response = await this.client.get('/me/bills');
-    return response.data;
-  }
-
-  async getMyDashboard(): Promise<any> {
-    const response = await this.client.get('/me/dashboard');
     return response.data;
   }
 

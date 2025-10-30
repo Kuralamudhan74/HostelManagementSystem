@@ -61,6 +61,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Block tenant login for Phase 1
+    if (user.role === 'tenant') {
+      res.status(401).json({ message: 'Tenant login is disabled. Please contact admin.' });
+      return;
+    }
+
     // Generate tokens
     const tokenPayload = {
       userId: user._id,

@@ -61,15 +61,6 @@ const ProfilePage: React.FC = () => {
     },
   });
 
-  // Get current month dues for tenants
-  const { data: duesData } = useQuery({
-    queryKey: ['profile-dues'],
-    queryFn: async () => {
-      const response = await apiClient.getMyDues();
-      return response;
-    },
-    enabled: true,
-  });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -121,61 +112,6 @@ const ProfilePage: React.FC = () => {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Current Month Expenses (for tenants only) */}
-        {duesData?.currentRent && (
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center">
-                <div className="p-3 bg-white bg-opacity-20 rounded-lg">
-                  <Receipt className="w-6 h-6 text-white" />
-                </div>
-                <div className="ml-4">
-                  <h2 className="text-xl font-bold text-white">Current Month Expenses</h2>
-                  <p className="text-sm text-blue-100">
-                    {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white bg-opacity-10 rounded-lg p-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <div>
-                  <p className="text-sm text-blue-100 mb-1">Monthly Rent</p>
-                  <p className="text-2xl font-bold text-white">
-                    {formatCurrency(duesData.currentRent?.amount || 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-blue-100 mb-1">EB Bill</p>
-                  <p className="text-2xl font-bold text-white">
-                    {formatCurrency(duesData.dues?.ebBill?.amount || 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-blue-100 mb-1">Total Due</p>
-                  <p className="text-2xl font-bold text-white">
-                    {formatCurrency((duesData.currentRent?.amount || 0) + (duesData.dues?.ebBill?.amount || 0))}
-                  </p>
-                </div>
-              </div>
-              <div className="pt-4 border-t border-blue-400 border-opacity-30">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-blue-100">Payment Status</span>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    duesData?.currentRent?.status === 'paid' 
-                      ? 'bg-green-100 text-green-800'
-                      : duesData?.currentRent?.status === 'partial'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {(duesData?.currentRent?.status || 'DUE').toUpperCase()}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit}>
           {/* Personal Information */}
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">

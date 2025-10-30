@@ -3,6 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 // User Schema
 export interface IUser extends Document {
   _id: string;
+  tenantId?: string; // Unique tenant identifier (e.g., T12345ABC)
   email: string;
   password: string;
   firstName: string;
@@ -30,6 +31,7 @@ export interface IUser extends Document {
 }
 
 const userSchema = new Schema<IUser>({
+  tenantId: { type: String, unique: true, sparse: true }, // Unique ID for tenants only
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   firstName: { type: String, required: true },

@@ -154,7 +154,6 @@ const LoginPage: React.FC = () => {
             <h3 className="text-sm font-medium text-blue-800 mb-2">Demo Credentials:</h3>
             <div className="text-xs text-blue-700 space-y-1">
               <p><strong>Admin:</strong> admin@hostel.com / admin123</p>
-              <p><strong>Tenant:</strong> tenant1@hostel.com / tenant123</p>
             </div>
           </motion.div>
         </motion.form>

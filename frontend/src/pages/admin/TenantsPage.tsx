@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ArrowLeft, Plus, Search, MapPin, Phone, Mail, X, Eye, Power } from 'lucide-react';
+import { Users, ArrowLeft, Plus, Search, MapPin, Phone, Mail, X, Eye, Power, Upload, Download, Trash2, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -23,14 +23,21 @@ const addTenantSchema = z.object({
 const TenantsPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  
+
   const [isAddTenantModalOpen, setIsAddTenantModalOpen] = useState(false);
   const [isUnassignModalOpen, setIsUnassignModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isViewProfileModalOpen, setIsViewProfileModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImportResultsModalOpen, setIsImportResultsModalOpen] = useState(false);
   const [selectedTenancy, setSelectedTenancy] = useState<any>(null);
+  const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [selectedTenantProfile, setSelectedTenantProfile] = useState<any>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
-  
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importResults, setImportResults] = useState<any>(null);
+  const [showPastTenants, setShowPastTenants] = useState(false);
+
   const [searchParams, setSearchParams] = useState({
     search: '',
     roomNumber: '',
@@ -103,11 +110,59 @@ const TenantsPage: React.FC = () => {
     },
   });
 
+  // CSV Import mutation
+  const importCSVMutation = useMutation({
+    mutationFn: (file: File) => apiClient.importTenantsFromCSV(file),
+    onSuccess: (data) => {
+      setImportResults(data);
+      setIsImportModalOpen(false);
+      setIsImportResultsModalOpen(true);
+      setSelectedFile(null);
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      toast.success(`Import completed: ${data.success} tenants created`);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to import CSV');
+    },
+  });
+
+  // Delete tenant mutation
+  const deleteTenantMutation = useMutation({
+    mutationFn: (tenantId: string) => apiClient.deleteTenant(tenantId),
+    onSuccess: (data) => {
+      toast.success(data.message);
+      setIsDeleteModalOpen(false);
+      setSelectedTenant(null);
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to delete tenant');
+    },
+  });
+
   const handleToggleStatus = (tenant: any, currentStatus: boolean) => {
     updateTenantStatusMutation.mutate({
       tenantId: tenant._id || tenant.id,
       isActive: !currentStatus
     });
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.name.endsWith('.csv')) {
+        setSelectedFile(file);
+      } else {
+        toast.error('Please select a CSV file');
+      }
+    }
+  };
+
+  const handleImportCSV = () => {
+    if (selectedFile) {
+      importCSVMutation.mutate(selectedFile);
+    }
   };
 
   const handleAddTenant = (data: any) => {
@@ -145,22 +200,31 @@ const TenantsPage: React.FC = () => {
 
   const tenancies = tenantsData?.tenancies || [];
   const allTenantUsers = tenantsData?.allTenantUsers || [];
-  
+
+  // Filter by active status based on showPastTenants toggle
+  const activeTenantUsers = showPastTenants
+    ? allTenantUsers
+    : allTenantUsers.filter((t: any) => t.isActive !== false);
+
   // Create a set of tenant IDs that have tenancies
   const assignedTenantIds = new Set(tenancies.map((t: any) => t.tenantId?._id || t.tenantId?.id));
-  
+
   // Get unassigned tenants (tenant users without active tenancies)
-  const unassignedTenants = allTenantUsers.filter((tenant: any) => 
+  const unassignedTenants = activeTenantUsers.filter((tenant: any) =>
     !assignedTenantIds.has(tenant._id || tenant.id)
   );
 
   // Filter results based on search
   const filteredTenancies = useMemo(() => {
+    let filtered = showPastTenants
+      ? tenancies
+      : tenancies.filter((t: any) => t.tenantId?.isActive !== false);
+
     if (!searchParams.search.trim() && !searchParams.roomNumber.trim()) {
-      return tenancies;
+      return filtered;
     }
 
-    return tenancies.filter((tenancy: any) => {
+    return filtered.filter((tenancy: any) => {
       // Filter by name
       if (searchParams.search.trim()) {
         const tenantName = `${tenancy.tenantId?.firstName || ''} ${tenancy.tenantId?.lastName || ''}`.toLowerCase();
@@ -182,7 +246,7 @@ const TenantsPage: React.FC = () => {
 
       return true;
     });
-  }, [tenancies, searchParams]);
+  }, [tenancies, searchParams, showPastTenants]);
 
   const filteredUnassignedTenants = useMemo(() => {
     if (!searchParams.search.trim()) {
@@ -219,6 +283,13 @@ const TenantsPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-3">
               <Button
+                onClick={() => setIsImportModalOpen(true)}
+                variant="secondary"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Import CSV
+              </Button>
+              <Button
                 onClick={() => setIsAddTenantModalOpen(true)}
                 variant="primary"
               >
@@ -231,13 +302,13 @@ const TenantsPage: React.FC = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search Bar */}
+        {/* Search Bar & Filters */}
         <motion.div
           className="bg-white rounded-lg shadow-sm p-6 mb-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Search by name
@@ -267,6 +338,23 @@ const TenantsPage: React.FC = () => {
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Show inactive tenants
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer bg-gray-50 p-3 rounded-md border border-gray-200 hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showPastTenants}
+                  onChange={(e) => setShowPastTenants(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm text-gray-700">Include past tenants</span>
+                </div>
+              </label>
             </div>
           </div>
         </motion.div>
@@ -331,33 +419,36 @@ const TenantsPage: React.FC = () => {
                   <p className="text-xs text-gray-500 mb-3">
                     Since: {new Date(tenancy.startDate).toLocaleDateString()}
                   </p>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="flex-1"
+                      className="flex-1 min-w-[120px]"
                       onClick={() => handleViewProfile(tenancy.tenantId?.id || tenancy.tenantId?._id || tenancy.tenantId)}
                     >
                       <Eye className="w-4 h-4 mr-2" />
-                      View Profile
+                      View
                     </Button>
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="flex-1"
-                      onClick={() => handleToggleStatus(tenancy.tenantId, tenancy.tenantId?.isActive !== false)}
-                    >
-                      <Power className="w-4 h-4 mr-2" />
-                      {tenancy.tenantId?.isActive !== false ? 'Deactivate' : 'Activate'}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="flex-1"
+                      className="flex-1 min-w-[120px]"
                       onClick={() => handleUnassignClick(tenancy)}
                     >
                       <X className="w-4 h-4 mr-2" />
                       Unassign
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="flex-1 min-w-[120px] bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                      onClick={() => {
+                        setSelectedTenant(tenancy.tenantId);
+                        setIsDeleteModalOpen(true);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete
                     </Button>
                   </div>
                 </div>
@@ -421,18 +512,22 @@ const TenantsPage: React.FC = () => {
                     variant="secondary"
                     size="sm"
                     className="w-full mb-2"
-                    onClick={() => handleToggleStatus(tenant, tenant.isActive !== false)}
+                    onClick={() => navigate('/admin/rooms')}
                   >
-                    <Power className="w-4 h-4 mr-2" />
-                    {tenant.isActive !== false ? 'Deactivate' : 'Activate'}
+                    <MapPin className="w-4 h-4 mr-2" />
+                    Assign to Room
                   </Button>
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="w-full"
-                    onClick={() => navigate('/admin/rooms')}
+                    className="w-full bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                    onClick={() => {
+                      setSelectedTenant(tenant);
+                      setIsDeleteModalOpen(true);
+                    }}
                   >
-                    Go to Rooms
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete Tenant
                   </Button>
                 </div>
               </motion.div>
@@ -593,6 +688,78 @@ const TenantsPage: React.FC = () => {
         </div>
       </Modal>
 
+      {/* Delete Tenant Modal */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setSelectedTenant(null);
+        }}
+        title="Delete Tenant"
+      >
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800 font-medium mb-2">⚠️ Warning: This action cannot be undone</p>
+            <p className="text-red-700 text-sm">
+              Deleting this tenant will:
+            </p>
+            <ul className="text-red-700 text-sm list-disc list-inside mt-2 space-y-1">
+              <li>Mark the tenant as inactive (soft delete)</li>
+              <li>Automatically end all active tenancies</li>
+              <li>Free up their room(s)</li>
+              <li>Hide them from the active tenants list</li>
+            </ul>
+          </div>
+
+          <p className="text-gray-700">
+            Are you sure you want to delete{' '}
+            <strong className="text-gray-900">
+              {selectedTenant?.firstName} {selectedTenant?.lastName}
+            </strong>?
+          </p>
+
+          {selectedTenant?.email && (
+            <p className="text-sm text-gray-600">
+              Email: {selectedTenant.email}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setSelectedTenant(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedTenant) {
+                  deleteTenantMutation.mutate(selectedTenant._id || selectedTenant.id);
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleteTenantMutation.isPending}
+            >
+              {deleteTenantMutation.isPending ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  <span className="ml-2">Deleting...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Yes, Delete Tenant
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* View Profile Modal */}
       <Modal
         isOpen={isViewProfileModalOpen}
@@ -717,6 +884,153 @@ const TenantsPage: React.FC = () => {
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      {/* CSV Import Modal */}
+      <Modal
+        isOpen={isImportModalOpen}
+        onClose={() => {
+          setIsImportModalOpen(false);
+          setSelectedFile(null);
+        }}
+        title="Import Tenants from CSV"
+      >
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h4 className="text-sm font-medium text-blue-900 mb-2">CSV Format Requirements:</h4>
+            <ul className="text-xs text-blue-800 space-y-1 list-disc list-inside">
+              <li><strong>Required:</strong> Name, Father Name, Date of Birth</li>
+              <li><strong>Required:</strong> Mobile Number, WhatsApp Number</li>
+              <li><strong>Required:</strong> Permanent Address (native), City & State</li>
+              <li><strong>Required:</strong> Aadhar Number, Occupation</li>
+              <li><strong>Required:</strong> Name of College/Company/Institute</li>
+              <li><strong>Required:</strong> Emergency Contact with Name (format: "Name - Phone")</li>
+              <li><strong>Optional:</strong> Expected Duration of Stay, Office Address</li>
+            </ul>
+            <p className="text-xs text-blue-700 mt-2 font-medium">
+              ✓ Passwords & emails will be auto-generated<br/>
+              ✓ Duplicate users (same phone/Aadhar) will be skipped
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select CSV File
+            </label>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileSelect}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            />
+            {selectedFile && (
+              <p className="text-sm text-green-600 mt-2">
+                Selected: {selectedFile.name}
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3 justify-end pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsImportModalOpen(false);
+                setSelectedFile(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleImportCSV}
+              disabled={!selectedFile || importCSVMutation.isPending}
+            >
+              {importCSVMutation.isPending ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  <span className="ml-2">Importing...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Import Results Modal */}
+      <Modal
+        isOpen={isImportResultsModalOpen}
+        onClose={() => {
+          setIsImportResultsModalOpen(false);
+          setImportResults(null);
+        }}
+        title="Import Results"
+      >
+        {importResults && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-sm font-medium text-green-900">Successful</p>
+                <p className="text-2xl font-bold text-green-700">{importResults.success}</p>
+              </div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm font-medium text-red-900">Failed</p>
+                <p className="text-2xl font-bold text-red-700">{importResults.failed}</p>
+              </div>
+            </div>
+
+            {importResults.createdTenants && importResults.createdTenants.length > 0 && (
+              <div className="border border-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Created Tenants & Passwords:</h4>
+                <div className="space-y-2">
+                  {importResults.createdTenants.map((tenant: any, index: number) => (
+                    <div key={index} className="bg-gray-50 p-3 rounded text-xs">
+                      <p className="font-medium">{tenant.firstName} {tenant.lastName}</p>
+                      <p className="text-gray-600">Email: {tenant.email}</p>
+                      <p className="text-blue-600 font-mono">Password: {tenant.password}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-600 mt-3">
+                  Note: Please copy and share these passwords with tenants. They won't be shown again.
+                </p>
+              </div>
+            )}
+
+            {importResults.errors && importResults.errors.length > 0 && (
+              <div className="border border-red-200 rounded-lg p-4 max-h-60 overflow-y-auto">
+                <h4 className="text-sm font-medium text-red-900 mb-3">Errors:</h4>
+                <div className="space-y-2">
+                  {importResults.errors.map((error: any, index: number) => (
+                    <div key={index} className="bg-red-50 p-3 rounded text-xs">
+                      <p className="font-medium text-red-900">Row {error.row}: {error.email}</p>
+                      <p className="text-red-700">{error.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-4">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => {
+                  setIsImportResultsModalOpen(false);
+                  setImportResults(null);
+                }}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
