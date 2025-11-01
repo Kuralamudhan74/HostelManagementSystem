@@ -49,7 +49,7 @@ class ApiClient {
                 }
               });
 
-              const { token: accessToken, refreshToken: newRefreshToken } = response.data;
+              const { accessToken, refreshToken: newRefreshToken } = response.data;
               localStorage.setItem('accessToken', accessToken);
               localStorage.setItem('refreshToken', newRefreshToken);
 
@@ -172,8 +172,8 @@ class ApiClient {
     message: string;
     success: number;
     failed: number;
-    errors: Array<{ row: number; email?: string; reason: string }>;
-    createdTenants: Array<{ email: string; password: string; firstName: string; lastName: string }>;
+    errors: Array<{ row: number; name?: string; reason: string }>;
+    createdTenants: Array<{ tenantId: string; firstName: string; lastName: string }>;
   }> {
     const formData = new FormData();
     formData.append('file', file);

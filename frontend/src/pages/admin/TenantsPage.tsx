@@ -1,30 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ArrowLeft, Plus, Search, MapPin, Phone, Mail, X, Eye, Power, Upload, Download, Trash2, Filter } from 'lucide-react';
+import { Users, ArrowLeft, Search, MapPin, Phone, X, Eye, Upload, Trash2, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import apiClient from '../../services/api';
 import toast from 'react-hot-toast';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 
-const addTenantSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  phone: z.string().optional(),
-});
 
 const TenantsPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [isAddTenantModalOpen, setIsAddTenantModalOpen] = useState(false);
   const [isUnassignModalOpen, setIsUnassignModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isViewProfileModalOpen, setIsViewProfileModalOpen] = useState(false);
@@ -44,9 +33,6 @@ const TenantsPage: React.FC = () => {
   });
 
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm({
-    resolver: zodResolver(addTenantSchema),
-  });
 
   // Fetch tenants and unassigned tenant users with ALL data (no filtering on API)
   const { data: tenantsData, isLoading } = useQuery({
@@ -57,19 +43,6 @@ const TenantsPage: React.FC = () => {
     }),
   });
 
-  // Create tenant user mutation
-  const createTenantMutation = useMutation({
-    mutationFn: (data: any) => apiClient.register(data),
-    onSuccess: () => {
-      toast.success('Tenant created successfully');
-      setIsAddTenantModalOpen(false);
-      reset();
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create tenant');
-    },
-  });
 
   // Unassign tenant mutation
   const unassignTenantMutation = useMutation({
@@ -165,13 +138,6 @@ const TenantsPage: React.FC = () => {
     }
   };
 
-  const handleAddTenant = (data: any) => {
-    createTenantMutation.mutate({
-      ...data,
-      role: 'tenant',
-      phone: data.phone || '',
-    });
-  };
 
   const handleUnassignClick = (tenancy: any) => {
     setSelectedTenancy(tenancy);
@@ -202,23 +168,30 @@ const TenantsPage: React.FC = () => {
   const allTenantUsers = tenantsData?.allTenantUsers || [];
 
   // Filter by active status based on showPastTenants toggle
+  // showPastTenants = true: show only past (inactive) tenants
+  // showPastTenants = false: show only active tenants
   const activeTenantUsers = showPastTenants
-    ? allTenantUsers
+    ? allTenantUsers.filter((t: any) => t.isActive === false)
     : allTenantUsers.filter((t: any) => t.isActive !== false);
 
   // Create a set of tenant IDs that have tenancies
   const assignedTenantIds = new Set(tenancies.map((t: any) => t.tenantId?._id || t.tenantId?.id));
 
   // Get unassigned tenants (tenant users without active tenancies)
-  const unassignedTenants = activeTenantUsers.filter((tenant: any) =>
-    !assignedTenantIds.has(tenant._id || tenant.id)
-  );
+  // When showing past tenants, exclude unassigned tenants (only show deleted tenants with tenancies)
+  const unassignedTenants = showPastTenants
+    ? [] // Don't show unassigned tenants when viewing past tenants
+    : activeTenantUsers.filter((tenant: any) =>
+        !assignedTenantIds.has(tenant._id || tenant.id)
+      );
 
   // Filter results based on search
   const filteredTenancies = useMemo(() => {
+    // showPastTenants = true: show only inactive tenancies
+    // showPastTenants = false: show only active tenancies
     let filtered = showPastTenants
-      ? tenancies
-      : tenancies.filter((t: any) => t.tenantId?.isActive !== false);
+      ? tenancies.filter((t: any) => t.tenantId?.isActive === false || t.isActive === false)
+      : tenancies.filter((t: any) => t.tenantId?.isActive !== false && t.isActive !== false);
 
     if (!searchParams.search.trim() && !searchParams.roomNumber.trim()) {
       return filtered;
@@ -228,18 +201,19 @@ const TenantsPage: React.FC = () => {
       // Filter by name
       if (searchParams.search.trim()) {
         const tenantName = `${tenancy.tenantId?.firstName || ''} ${tenancy.tenantId?.lastName || ''}`.toLowerCase();
-        const tenantEmail = (tenancy.tenantId?.email || '').toLowerCase();
+        const tenantId = (tenancy.tenantId?.tenantId || '').toString().toLowerCase();
         const searchLower = searchParams.search.toLowerCase();
         
-        if (!tenantName.includes(searchLower) && !tenantEmail.includes(searchLower)) {
+        if (!tenantName.includes(searchLower) && !tenantId.includes(searchLower)) {
           return false;
         }
       }
 
-      // Filter by room number
+      // Filter by room number (handle both numeric and string room numbers)
       if (searchParams.roomNumber.trim()) {
-        const roomNumber = (tenancy.roomId?.roomNumber || '').toLowerCase();
-        if (!roomNumber.includes(searchParams.roomNumber.toLowerCase())) {
+        const roomNumber = (tenancy.roomId?.roomNumber || '').toString().toLowerCase();
+        const searchRoom = searchParams.roomNumber.toLowerCase();
+        if (!roomNumber.includes(searchRoom)) {
           return false;
         }
       }
@@ -256,8 +230,8 @@ const TenantsPage: React.FC = () => {
     const searchLower = searchParams.search.toLowerCase();
     return unassignedTenants.filter((tenant: any) => {
       const fullName = `${tenant.firstName || ''} ${tenant.lastName || ''}`.toLowerCase();
-      const email = (tenant.email || '').toLowerCase();
-      return fullName.includes(searchLower) || email.includes(searchLower);
+      const tenantId = (tenant.tenantId || '').toString().toLowerCase();
+      return fullName.includes(searchLower) || tenantId.includes(searchLower);
     });
   }, [unassignedTenants, searchParams]);
 
@@ -288,13 +262,6 @@ const TenantsPage: React.FC = () => {
               >
                 <Upload className="w-4 h-4 mr-2" />
                 Import CSV
-              </Button>
-              <Button
-                onClick={() => setIsAddTenantModalOpen(true)}
-                variant="primary"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Tenant
               </Button>
             </div>
           </div>
@@ -399,8 +366,8 @@ const TenantsPage: React.FC = () => {
 
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center text-sm text-gray-600">
-                    <Mail className="w-4 h-4 mr-2" />
-                    {tenancy.tenantId?.email}
+                    <span className="font-semibold mr-2">Tenant ID:</span>
+                    {tenancy.tenantId?.tenantId || 'N/A'}
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
                     <Phone className="w-4 h-4 mr-2" />
@@ -438,18 +405,20 @@ const TenantsPage: React.FC = () => {
                       <X className="w-4 h-4 mr-2" />
                       Unassign
                     </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="flex-1 min-w-[120px] bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
-                      onClick={() => {
-                        setSelectedTenant(tenancy.tenantId);
-                        setIsDeleteModalOpen(true);
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Delete
-                    </Button>
+                    {!showPastTenants && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="flex-1 min-w-[120px] bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                        onClick={() => {
+                          setSelectedTenant(tenancy.tenantId);
+                          setIsDeleteModalOpen(true);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
+                      </Button>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -482,8 +451,8 @@ const TenantsPage: React.FC = () => {
 
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center text-sm text-gray-600">
-                    <Mail className="w-4 h-4 mr-2" />
-                    {tenant.email}
+                    <span className="font-semibold mr-2">Tenant ID:</span>
+                    {tenant.tenantId || 'N/A'}
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
                     <Phone className="w-4 h-4 mr-2" />
@@ -539,113 +508,15 @@ const TenantsPage: React.FC = () => {
           <div className="text-center py-12">
             <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No tenants found</h3>
-            <p className="text-gray-600 mb-6">Get started by adding your first tenant</p>
-            <Button onClick={() => setIsAddTenantModalOpen(true)} variant="primary">
-              <Plus className="w-4 h-4 mr-2" />
-              Add First Tenant
+            <p className="text-gray-600 mb-6">Get started by importing tenants from CSV</p>
+            <Button onClick={() => setIsImportModalOpen(true)} variant="primary">
+              <Upload className="w-4 h-4 mr-2" />
+              Import CSV
             </Button>
           </div>
         )}
       </div>
 
-      {/* Add Tenant Modal */}
-      <Modal
-        isOpen={isAddTenantModalOpen}
-        onClose={() => {
-          setIsAddTenantModalOpen(false);
-          reset();
-        }}
-        title="Add New Tenant"
-      >
-        <form onSubmit={handleSubmit(handleAddTenant)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                First Name *
-              </label>
-              <input
-                type="text"
-                {...register('firstName')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-              />
-              {errors.firstName && (
-                <p className="text-red-500 text-xs mt-1">{errors.firstName.message as string}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Last Name *
-              </label>
-              <input
-                type="text"
-                {...register('lastName')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-              />
-              {errors.lastName && (
-                <p className="text-red-500 text-xs mt-1">{errors.lastName.message as string}</p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email *
-            </label>
-            <input
-              type="email"
-              {...register('email')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-            />
-            {errors.email && (
-              <p className="text-red-500 text-xs mt-1">{errors.email.message as string}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password *
-            </label>
-            <input
-              type="password"
-              {...register('password')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-            />
-            {errors.password && (
-              <p className="text-red-500 text-xs mt-1">{errors.password.message as string}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Phone
-            </label>
-            <input
-              type="text"
-              {...register('phone')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setIsAddTenantModalOpen(false);
-                reset();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-            >
-              Add Tenant
-            </Button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Unassign Tenant Modal */}
       <Modal
@@ -718,9 +589,9 @@ const TenantsPage: React.FC = () => {
             </strong>?
           </p>
 
-          {selectedTenant?.email && (
+          {selectedTenant?.tenantId && (
             <p className="text-sm text-gray-600">
-              Email: {selectedTenant.email}
+              Tenant ID: {selectedTenant.tenantId}
             </p>
           )}
 
@@ -789,8 +660,8 @@ const TenantsPage: React.FC = () => {
                   <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.lastName || 'N/A'}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Email</label>
-                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.email || 'N/A'}</p>
+                  <label className="block text-sm font-medium text-gray-700">Tenant ID</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedTenantProfile.tenantId || 'N/A'}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Phone</label>
@@ -908,7 +779,7 @@ const TenantsPage: React.FC = () => {
               <li><strong>Optional:</strong> Expected Duration of Stay, Office Address</li>
             </ul>
             <p className="text-xs text-blue-700 mt-2 font-medium">
-              ✓ Passwords & emails will be auto-generated<br/>
+              ✓ Unique tenant IDs will be auto-generated (1, 2, 3, ...)<br/>
               ✓ Duplicate users (same phone/Aadhar) will be skipped
             </p>
           </div>
@@ -987,19 +858,15 @@ const TenantsPage: React.FC = () => {
 
             {importResults.createdTenants && importResults.createdTenants.length > 0 && (
               <div className="border border-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto">
-                <h4 className="text-sm font-medium text-gray-900 mb-3">Created Tenants & Passwords:</h4>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Created Tenants:</h4>
                 <div className="space-y-2">
                   {importResults.createdTenants.map((tenant: any, index: number) => (
                     <div key={index} className="bg-gray-50 p-3 rounded text-xs">
                       <p className="font-medium">{tenant.firstName} {tenant.lastName}</p>
-                      <p className="text-gray-600">Email: {tenant.email}</p>
-                      <p className="text-blue-600 font-mono">Password: {tenant.password}</p>
+                      <p className="text-blue-600 font-mono">Tenant ID: {tenant.tenantId}</p>
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-gray-600 mt-3">
-                  Note: Please copy and share these passwords with tenants. They won't be shown again.
-                </p>
               </div>
             )}
 
@@ -1009,7 +876,7 @@ const TenantsPage: React.FC = () => {
                 <div className="space-y-2">
                   {importResults.errors.map((error: any, index: number) => (
                     <div key={index} className="bg-red-50 p-3 rounded text-xs">
-                      <p className="font-medium text-red-900">Row {error.row}: {error.email}</p>
+                      <p className="font-medium text-red-900">Row {error.row}: {error.name || 'N/A'}</p>
                       <p className="text-red-700">{error.reason}</p>
                     </div>
                   ))}

@@ -411,7 +411,7 @@ export const getTenants = async (req: AuthRequest, res: Response) => {
     // Get all tenant users if includeUnassigned is true
     let allTenantUsers: any[] = [];
     if (includeUnassigned === 'true') {
-      allTenantUsers = await User.find({ role: 'tenant' }).select('_id email firstName lastName phone isActive');
+      allTenantUsers = await User.find({ role: 'tenant' }).select('_id tenantId firstName lastName phone isActive');
     }
 
     const query: any = {};
@@ -438,7 +438,7 @@ export const getTenants = async (req: AuthRequest, res: Response) => {
 
     const tenancies = await Tenancy.find(query)
       .populate('roomId', 'roomNumber hostelId')
-      .populate('tenantId', 'firstName lastName email phone')
+      .populate('tenantId', 'firstName lastName tenantId phone')
       .populate('roomId.hostelId', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)

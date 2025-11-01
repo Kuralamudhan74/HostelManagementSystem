@@ -31,12 +31,14 @@ export const generateRefreshToken = (payload: JWTPayload): string => {
 
 // Verify JWT token
 export const verifyToken = (token: string): JWTPayload => {
-  return jwt.verify(token, process.env.JWT_SECRET!) as JWTPayload;
+  const secret = process.env.JWT_SECRET || 'fallback-secret';
+  return jwt.verify(token, secret) as JWTPayload;
 };
 
 // Verify refresh token
 export const verifyRefreshToken = (token: string): JWTPayload => {
-  return jwt.verify(token, process.env.JWT_REFRESH_SECRET!) as JWTPayload;
+  const secret = process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret';
+  return jwt.verify(token, secret) as JWTPayload;
 };
 
 // Hash password

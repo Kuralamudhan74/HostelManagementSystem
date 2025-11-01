@@ -34,12 +34,11 @@ interface ImportResult {
   failed: number;
   errors: Array<{
     row: number;
-    email?: string;
+    name?: string;
     reason: string;
   }>;
   createdTenants: Array<{
-    email: string;
-    password: string;
+    tenantId: string;
     firstName: string;
     lastName: string;
   }>;
@@ -97,23 +96,25 @@ const parseDate = (dateStr: string): Date | null => {
   return null;
 };
 
-// Generate random password based on name
-const generatePassword = (name: string): string => {
-  const cleanName = name.toLowerCase().replace(/\s+/g, '');
-  const randomNum = Math.floor(Math.random() * 1000);
-  return `${cleanName}${randomNum}`;
-};
+// Generate unique incremental tenant ID
+const generateNextTenantId = async (): Promise<number> => {
+  // Find all tenants with numeric tenantIds
+  const allTenants = await User.find({ 
+    role: 'tenant',
+    tenantId: { $exists: true, $ne: null }
+  }).select('tenantId');
 
-// Generate email from name - simple clean format
-const generateEmail = (firstName: string, lastName: string): string => {
-  const cleanFirst = firstName.toLowerCase().replace(/[^a-z]/g, '');
-  const cleanLast = lastName.toLowerCase().replace(/[^a-z]/g, '');
-  return `${cleanFirst}.${cleanLast}@tenant.hostel.com`;
-};
+  let maxId = 0;
+  for (const tenant of allTenants) {
+    if (tenant.tenantId) {
+      const id = parseInt(tenant.tenantId, 10);
+      if (!isNaN(id) && id > maxId) {
+        maxId = id;
+      }
+    }
+  }
 
-// Generate unique tenant ID
-const generateTenantId = (): string => {
-  return 'T' + Date.now().toString().slice(-8) + Math.random().toString(36).substring(2, 6).toUpperCase();
+  return maxId + 1; // Start from 1 if no tenants exist, otherwise increment from max
 };
 
 // Clean and normalize field value
@@ -161,15 +162,8 @@ const mapRowToUser = (row: ImportRow): any => {
     }
   }
 
-  // Generate email from name (clean format: firstname.lastname@tenant.hostel.com)
-  if (!userData.email && userData.firstName) {
-    userData.email = generateEmail(userData.firstName, userData.lastName || userData.firstName);
-  }
-
-  // Generate unique tenant ID
-  if (!userData.tenantId) {
-    userData.tenantId = generateTenantId();
-  }
+  // Note: Email and password are not generated for tenants
+  // They are not needed since tenants don't log in via the system
 
   // Set default emergency contact relation if not provided
   if (!userData.emergencyContactRelation && userData.emergencyContactName) {
@@ -196,7 +190,7 @@ const validateTenantData = (data: any, rowNum: number): { valid: boolean; errors
   if (!data.collegeCompanyName) errors.push('College/Company/Institute name is required');
   if (!data.emergencyContactName) errors.push('Emergency contact is required');
 
-  // Email is auto-generated, so no validation needed
+  // Email and password are not required for tenants (no login functionality)
 
   // Expected duration is optional (not checked)
 
@@ -253,6 +247,9 @@ export const importTenantsFromCSV = async (req: AuthRequest, res: Response): Pro
 
     console.log(`Parsed ${results.length} rows from CSV`);
 
+    // Get the starting tenant ID for this import batch
+    let currentTenantId = await generateNextTenantId();
+
     // Process each row
     for (let i = 0; i < results.length; i++) {
       const row = results[i];
@@ -268,13 +265,13 @@ export const importTenantsFromCSV = async (req: AuthRequest, res: Response): Pro
           importResult.failed++;
           importResult.errors.push({
             row: rowNum,
-            email: userData.email || 'N/A',
+            name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || 'N/A',
             reason: validation.errors.join(', ')
           });
           continue;
         }
 
-        // Check for duplicate user by phone or Aadhar (since email is auto-generated)
+        // Check for duplicate user by phone or Aadhar
         const existingUserByPhone = await User.findOne({ phone: userData.phone });
         const existingUserByAadhar = await User.findOne({ aadharNumber: userData.aadharNumber });
 
@@ -283,15 +280,24 @@ export const importTenantsFromCSV = async (req: AuthRequest, res: Response): Pro
           importResult.failed++;
           importResult.errors.push({
             row: rowNum,
-            email: userData.firstName + ' ' + userData.lastName,
+            name: `${userData.firstName} ${userData.lastName}`,
             reason: 'User already exists (duplicate phone or Aadhar number)'
           });
           continue;
         }
 
-        // Generate password based on name
-        const password = generatePassword(userData.firstName + ' ' + (userData.lastName || ''));
-        const hashedPassword = await hashPassword(password);
+        // Generate unique incremental tenant ID
+        userData.tenantId = currentTenantId.toString();
+        currentTenantId++;
+
+        // Generate a placeholder email (required by model but not used for login)
+        // Format: tenant{id}@hostel.local (not displayed or shared)
+        userData.email = `tenant${userData.tenantId}@hostel.local`;
+
+        // Generate a random password (required by model but not used for login)
+        // Tenants don't have login access, so this is just a placeholder
+        const placeholderPassword = `placeholder_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+        const hashedPassword = await hashPassword(placeholderPassword);
 
         // Create user
         const newUser = new User({
@@ -303,26 +309,25 @@ export const importTenantsFromCSV = async (req: AuthRequest, res: Response): Pro
 
         // Log action
         await logAction(req.user!, 'User', newUser._id, 'create', null, {
-          email: newUser.email,
+          tenantId: newUser.tenantId,
           role: 'tenant',
           source: 'CSV Import'
         });
 
         importResult.success++;
         importResult.createdTenants.push({
-          email: userData.email,
-          password: password, // Return plain password so admin can share with tenant
+          tenantId: userData.tenantId,
           firstName: userData.firstName,
           lastName: userData.lastName
         });
 
-        console.log(`Successfully created tenant: ${userData.email}`);
+        console.log(`Successfully created tenant: ${userData.firstName} ${userData.lastName} (ID: ${userData.tenantId})`);
       } catch (error: any) {
         console.error(`Error processing row ${rowNum}:`, error);
         importResult.failed++;
         importResult.errors.push({
           row: rowNum,
-          email: row['Email Address'] || 'N/A',
+          name: row['Name'] || 'N/A',
           reason: error.message || 'Unknown error'
         });
       }

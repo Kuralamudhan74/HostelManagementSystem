@@ -77,8 +77,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const accessToken = generateToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
 
-    // Log login action
-    await logAction(user, 'User', user._id, 'update', null, { lastLogin: new Date() });
+    // Log login action (non-blocking - don't fail login if audit log fails)
+    try {
+      await logAction(user, 'User', user._id, 'update', null, { lastLogin: new Date() });
+    } catch (auditError) {
+      console.error('Failed to create audit log for login:', auditError);
+      // Continue with login even if audit logging fails
+    }
 
     res.json({
       message: 'Login successful',
@@ -92,9 +97,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         role: user.role
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Error stack:', error?.stack);
+    res.status(500).json({ 
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
