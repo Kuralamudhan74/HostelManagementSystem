@@ -1,14 +1,23 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ArrowLeft, Search, MapPin, Phone, X, Eye, Upload, Trash2, Filter } from 'lucide-react';
+import { Users, ArrowLeft, Search, MapPin, Phone, X, Eye, Upload, Trash2, Filter, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import apiClient from '../../services/api';
 import toast from 'react-hot-toast';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 
+const assignRoomSchema = z.object({
+  roomId: z.string().min(1, 'Room is required'),
+  startDate: z.string().min(1, 'Start date is required'),
+  tenantShare: z.number().min(1, 'Share amount is required'),
+  withFood: z.boolean().optional(),
+});
 
 const TenantsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -19,6 +28,7 @@ const TenantsPage: React.FC = () => {
   const [isViewProfileModalOpen, setIsViewProfileModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isImportResultsModalOpen, setIsImportResultsModalOpen] = useState(false);
+  const [isAssignRoomModalOpen, setIsAssignRoomModalOpen] = useState(false);
   const [selectedTenancy, setSelectedTenancy] = useState<any>(null);
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [selectedTenantProfile, setSelectedTenantProfile] = useState<any>(null);
@@ -32,15 +42,32 @@ const TenantsPage: React.FC = () => {
     roomNumber: '',
   });
 
+  const assignRoomForm = useForm({
+    resolver: zodResolver(assignRoomSchema),
+  });
+
 
 
   // Fetch tenants and unassigned tenant users with ALL data (no filtering on API)
   const { data: tenantsData, isLoading } = useQuery({
-    queryKey: ['tenants'],
+    queryKey: ['tenants', showPastTenants],
     queryFn: () => apiClient.getTenants({
       limit: 100,
       includeUnassigned: true,
+      active: showPastTenants ? 'false' : 'true',
     }),
+  });
+
+  // Fetch rooms for assignment modal
+  const { data: roomsData } = useQuery({
+    queryKey: ['rooms'],
+    queryFn: () => apiClient.getRooms(),
+  });
+
+  // Fetch hostels for room selection
+  const { data: hostelsData } = useQuery({
+    queryKey: ['hostels'],
+    queryFn: () => apiClient.getHostels(),
   });
 
 
@@ -164,6 +191,39 @@ const TenantsPage: React.FC = () => {
     }
   };
 
+  const handleAssignRoomClick = (tenancy: any) => {
+    setSelectedTenancy(tenancy);
+    setSelectedTenant(tenancy.tenantId);
+    setIsAssignRoomModalOpen(true);
+  };
+
+  const handleAssignRoom = async (data: any) => {
+    if (!selectedTenant) {
+      toast.error('Tenant not selected');
+      return;
+    }
+
+    try {
+      const tenantId = selectedTenant._id || selectedTenant.id || selectedTenant;
+      await apiClient.addTenantToRoom(data.roomId, {
+        tenantId,
+        startDate: data.startDate,
+        tenantShare: data.tenantShare,
+        withFood: data.withFood || false,
+      });
+      toast.success('Tenant assigned to room successfully');
+      setIsAssignRoomModalOpen(false);
+      assignRoomForm.reset();
+      setSelectedTenancy(null);
+      setSelectedTenant(null);
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    } catch (error: any) {
+      console.error('Assign room error:', error);
+      toast.error(error.response?.data?.message || 'Failed to assign tenant to room');
+    }
+  };
+
   const tenancies = tenantsData?.tenancies || [];
   const allTenantUsers = tenantsData?.allTenantUsers || [];
 
@@ -178,9 +238,12 @@ const TenantsPage: React.FC = () => {
   const assignedTenantIds = new Set(tenancies.map((t: any) => t.tenantId?._id || t.tenantId?.id));
 
   // Get unassigned tenants (tenant users without active tenancies)
-  // When showing past tenants, exclude unassigned tenants (only show deleted tenants with tenancies)
+  // When showing past tenants, show unassigned past tenants (deleted tenants without tenancies)
   const unassignedTenants = showPastTenants
-    ? [] // Don't show unassigned tenants when viewing past tenants
+    ? activeTenantUsers.filter((tenant: any) => {
+        // Show past tenants who don't have any tenancy (assigned or past)
+        return !assignedTenantIds.has(tenant._id || tenant.id);
+      })
     : activeTenantUsers.filter((tenant: any) =>
         !assignedTenantIds.has(tenant._id || tenant.id)
       );
@@ -251,7 +314,15 @@ const TenantsPage: React.FC = () => {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Tenant Management</h1>
                 <p className="text-sm text-gray-600">
-                  {tenancies.length} assigned • {unassignedTenants.length} unassigned • {tenancies.length + unassignedTenants.length} total
+                  {showPastTenants ? (
+                    <>
+                      {tenancies.length} past tenancy records • {unassignedTenants.length} unassigned past tenants • {tenancies.length + unassignedTenants.length} total past tenants
+                    </>
+                  ) : (
+                    <>
+                      {tenancies.length} assigned • {unassignedTenants.length} unassigned • {tenancies.length + unassignedTenants.length} total active
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -322,6 +393,13 @@ const TenantsPage: React.FC = () => {
                   <span className="text-sm text-gray-700">Include past tenants</span>
                 </div>
               </label>
+              {showPastTenants && (
+                <div className="mt-2 text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded-md p-2">
+                  <p className="font-medium mb-1">Card Colors:</p>
+                  <p>• <span className="font-semibold">Gray cards:</span> Past tenants with room history (shows previous room)</p>
+                  <p>• <span className="font-semibold">Yellow cards:</span> Past tenants never assigned to a room</p>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>
@@ -335,7 +413,11 @@ const TenantsPage: React.FC = () => {
             {filteredTenancies.map((tenancy: any) => (
               <motion.div
                 key={tenancy.id || tenancy._id}
-                className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
+                className={`rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow ${
+                  showPastTenants 
+                    ? 'bg-gray-50 border border-gray-200' 
+                    : 'bg-white'
+                }`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
               >
@@ -375,7 +457,14 @@ const TenantsPage: React.FC = () => {
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
                     <MapPin className="w-4 h-4 mr-2" />
-                    Room {tenancy.roomId?.roomNumber || 'N/A'}
+                    {showPastTenants ? (
+                      <span>
+                        <span className="text-gray-500 italic">Previous Room:</span>{' '}
+                        <span className="font-medium">Room {tenancy.roomId?.roomNumber || 'N/A'}</span>
+                      </span>
+                    ) : (
+                      <span>Room {tenancy.roomId?.roomNumber || 'N/A'}</span>
+                    )}
                   </div>
                 </div>
 
@@ -383,9 +472,16 @@ const TenantsPage: React.FC = () => {
                   <p className="text-sm text-gray-600 mb-2">
                     Monthly Share: <span className="font-semibold">${tenancy.tenantShare || 0}</span>
                   </p>
-                  <p className="text-xs text-gray-500 mb-3">
-                    Since: {new Date(tenancy.startDate).toLocaleDateString()}
-                  </p>
+                  <div className="text-xs text-gray-500 mb-3 space-y-1">
+                    <p>
+                      Started: {new Date(tenancy.startDate).toLocaleDateString()}
+                    </p>
+                    {showPastTenants && tenancy.endDate && (
+                      <p className="text-red-600">
+                        Ended: {new Date(tenancy.endDate).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
                   <div className="flex gap-2 flex-wrap">
                     <Button
                       variant="secondary"
@@ -396,15 +492,27 @@ const TenantsPage: React.FC = () => {
                       <Eye className="w-4 h-4 mr-2" />
                       View
                     </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="flex-1 min-w-[120px]"
-                      onClick={() => handleUnassignClick(tenancy)}
-                    >
-                      <X className="w-4 h-4 mr-2" />
-                      Unassign
-                    </Button>
+                    {showPastTenants ? (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="flex-1 min-w-[120px]"
+                        onClick={() => handleAssignRoomClick(tenancy)}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Assign
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="flex-1 min-w-[120px]"
+                        onClick={() => handleUnassignClick(tenancy)}
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Unassign
+                      </Button>
+                    )}
                     {!showPastTenants && (
                       <Button
                         variant="secondary"
@@ -441,7 +549,9 @@ const TenantsPage: React.FC = () => {
                       <h3 className="font-semibold text-gray-900">
                         {tenant.firstName} {tenant.lastName}
                       </h3>
-                      <p className="text-sm text-gray-500">Tenant (Unassigned)</p>
+                      <p className="text-sm text-gray-500">
+                        {showPastTenants ? 'Past Tenant (Unassigned)' : 'Tenant (Unassigned)'}
+                      </p>
                     </div>
                   </div>
                   <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">
@@ -465,8 +575,10 @@ const TenantsPage: React.FC = () => {
                 </div>
 
                 <div className="pt-4 border-t border-gray-200">
-                  <p className="text-sm text-yellow-700 mb-3">
-                    This tenant needs to be assigned to a room.
+                  <p className={`text-sm mb-3 ${showPastTenants ? 'text-gray-700' : 'text-yellow-700'}`}>
+                    {showPastTenants 
+                      ? 'This past tenant can be reassigned to a room.'
+                      : 'This tenant needs to be assigned to a room.'}
                   </p>
                   <Button
                     variant="secondary"
@@ -477,27 +589,44 @@ const TenantsPage: React.FC = () => {
                     <Eye className="w-4 h-4 mr-2" />
                     View Profile
                   </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full mb-2"
-                    onClick={() => navigate('/admin/rooms')}
-                  >
-                    <MapPin className="w-4 h-4 mr-2" />
-                    Assign to Room
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
-                    onClick={() => {
-                      setSelectedTenant(tenant);
-                      setIsDeleteModalOpen(true);
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Tenant
-                  </Button>
+                  {showPastTenants ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="w-full mb-2"
+                      onClick={() => {
+                        setSelectedTenant(tenant);
+                        setIsAssignRoomModalOpen(true);
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Assign to Room
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-full mb-2"
+                      onClick={() => navigate('/admin/rooms')}
+                    >
+                      <MapPin className="w-4 h-4 mr-2" />
+                      Assign to Room
+                    </Button>
+                  )}
+                  {!showPastTenants && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-full bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                      onClick={() => {
+                        setSelectedTenant(tenant);
+                        setIsDeleteModalOpen(true);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Tenant
+                    </Button>
+                  )}
                 </div>
               </motion.div>
             ))}
@@ -833,6 +962,118 @@ const TenantsPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Assign Room Modal for Past Tenants */}
+      {selectedTenant && (
+        <Modal
+          isOpen={isAssignRoomModalOpen}
+          onClose={() => {
+            setIsAssignRoomModalOpen(false);
+            assignRoomForm.reset();
+            setSelectedTenancy(null);
+            setSelectedTenant(null);
+          }}
+          title={`Assign ${selectedTenant?.firstName} ${selectedTenant?.lastName} to Room`}
+        >
+          <form onSubmit={assignRoomForm.handleSubmit(handleAssignRoom)} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Room *
+              </label>
+              <select
+                {...assignRoomForm.register('roomId')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- Select a room --</option>
+                {roomsData?.rooms?.map((room: any) => {
+                  const roomTenancies = tenantsData?.tenancies?.filter((t: any) => {
+                    const roomIdFromTenancy = t.roomId?.id || t.roomId?._id || t.roomId;
+                    return roomIdFromTenancy === (room.id || room._id) && t.isActive;
+                  }) || [];
+                  const availableCapacity = room.capacity - roomTenancies.length;
+                  
+                  return (
+                    <option key={room.id || room._id} value={room.id || room._id}>
+                      {room.roomNumber} - {room.hostelId?.name || 'N/A'} ({availableCapacity} bed{availableCapacity !== 1 ? 's' : ''} available)
+                    </option>
+                  );
+                })}
+              </select>
+              {assignRoomForm.formState.errors.roomId && (
+                <p className="text-red-500 text-xs mt-1">
+                  {assignRoomForm.formState.errors.roomId.message as string}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start Date *
+              </label>
+              <input
+                type="date"
+                {...assignRoomForm.register('startDate')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              />
+              {assignRoomForm.formState.errors.startDate && (
+                <p className="text-red-500 text-xs mt-1">
+                  {assignRoomForm.formState.errors.startDate.message as string}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Monthly Share ($) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                {...assignRoomForm.register('tenantShare', { valueAsNumber: true })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                placeholder="250.00"
+              />
+              {assignRoomForm.formState.errors.tenantShare && (
+                <p className="text-red-500 text-xs mt-1">
+                  {assignRoomForm.formState.errors.tenantShare.message as string}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  {...assignRoomForm.register('withFood')}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">With Food</span>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setIsAssignRoomModalOpen(false);
+                  assignRoomForm.reset();
+                  setSelectedTenancy(null);
+                  setSelectedTenant(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+              >
+                Assign to Room
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* Import Results Modal */}
       <Modal

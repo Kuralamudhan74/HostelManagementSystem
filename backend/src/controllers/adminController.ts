@@ -313,6 +313,15 @@ export const addTenantToRoom = async (req: AuthRequest, res: Response): Promise<
 
     console.log('Adding tenant to room:', { roomId, tenantId, startDate, tenantShare });
 
+    // Get the tenant user
+    const tenantUser = await User.findById(tenantId);
+    if (!tenantUser) {
+      res.status(404).json({ 
+        message: 'Tenant not found' 
+      });
+      return;
+    }
+
     // Check if tenant is already in an active tenancy
     const existingTenancy = await Tenancy.findOne({
       tenantId,
@@ -324,6 +333,34 @@ export const addTenantToRoom = async (req: AuthRequest, res: Response): Promise<
         message: 'Tenant is already assigned to a room' 
       });
       return;
+    }
+
+    // Check room capacity
+    const room = await Room.findById(roomId);
+    if (!room) {
+      res.status(404).json({ 
+        message: 'Room not found' 
+      });
+      return;
+    }
+
+    const currentTenantsCount = await Tenancy.countDocuments({
+      roomId,
+      isActive: true
+    });
+
+    if (currentTenantsCount >= room.capacity) {
+      res.status(400).json({ 
+        message: 'Room is at full capacity' 
+      });
+      return;
+    }
+
+    // Reactivate tenant if they were inactive (past tenant)
+    if (!tenantUser.isActive) {
+      tenantUser.isActive = true;
+      await tenantUser.save();
+      console.log(`Reactivated tenant ${tenantUser.firstName} ${tenantUser.lastName}`);
     }
 
     const tenancy = new Tenancy({
@@ -409,9 +446,16 @@ export const getTenants = async (req: AuthRequest, res: Response) => {
     } = req.query;
 
     // Get all tenant users if includeUnassigned is true
+    // Filter by active status if specified
     let allTenantUsers: any[] = [];
     if (includeUnassigned === 'true') {
-      allTenantUsers = await User.find({ role: 'tenant' }).select('_id tenantId firstName lastName phone isActive');
+      const userQuery: any = { role: 'tenant' };
+      if (active === 'true') {
+        userQuery.isActive = true;
+      } else if (active === 'false') {
+        userQuery.isActive = false;
+      }
+      allTenantUsers = await User.find(userQuery).select('_id tenantId firstName lastName phone email isActive');
     }
 
     const query: any = {};
@@ -438,7 +482,7 @@ export const getTenants = async (req: AuthRequest, res: Response) => {
 
     const tenancies = await Tenancy.find(query)
       .populate('roomId', 'roomNumber hostelId')
-      .populate('tenantId', 'firstName lastName tenantId phone')
+      .populate('tenantId', 'firstName lastName tenantId phone email isActive')
       .populate('roomId.hostelId', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)

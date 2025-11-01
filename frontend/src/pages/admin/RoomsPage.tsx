@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2, ArrowLeft, Plus, Users, CheckCircle, Search, Trash2, Zap, DollarSign, AirVent, Bath } from 'lucide-react';
@@ -40,8 +40,20 @@ const RoomsPage: React.FC = () => {
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [ebBillAmount, setEbBillAmount] = useState('');
   const [tenantSearch, setTenantSearch] = useState('');
+  const [debouncedTenantSearch, setDebouncedTenantSearch] = useState('');
   const [pendingAssignmentData, setPendingAssignmentData] = useState<any>(null);
   const [selectedHostelFilter, setSelectedHostelFilter] = useState<string>('');
+
+  // Debounce tenant search with 300ms delay
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedTenantSearch(tenantSearch);
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [tenantSearch]);
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm({
     resolver: zodResolver(createRoomSchema),
@@ -117,6 +129,7 @@ const RoomsPage: React.FC = () => {
       setIsAssignTenantModalOpen(false);
       assignTenantForm.reset();
       setTenantSearch('');
+      setDebouncedTenantSearch('');
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
     } catch (error: any) {
@@ -155,6 +168,7 @@ const RoomsPage: React.FC = () => {
       setPendingAssignmentData(null);
       assignTenantForm.reset();
       setTenantSearch('');
+      setDebouncedTenantSearch('');
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
     } catch (error: any) {
@@ -274,8 +288,11 @@ const RoomsPage: React.FC = () => {
     );
 
     // Get unassigned tenant users (not in any active tenancy)
+    // IMPORTANT: Only include active tenants (exclude past/inactive tenants)
     const unassignedTenants = allTenantUsers.filter(
-      (user: any) => !activeTenancyTenantIds.has(user.id || user._id)
+      (user: any) => 
+        user.isActive !== false && // Only active tenants
+        !activeTenancyTenantIds.has(user.id || user._id)
     );
 
     // Get tenants who are assigned to a different room (for reassignment)
@@ -299,18 +316,18 @@ const RoomsPage: React.FC = () => {
       }
     });
 
-    // Filter by search term
-    if (tenantSearch.trim()) {
-      const searchLower = tenantSearch.toLowerCase();
+    // Filter by search term (case-insensitive)
+    if (debouncedTenantSearch.trim()) {
+      const searchLower = debouncedTenantSearch.toLowerCase();
       return allAvailable.filter((tenant: any) => {
-        const fullName = `${tenant.firstName} ${tenant.lastName}`.toLowerCase();
+        const fullName = `${tenant.firstName || ''} ${tenant.lastName || ''}`.toLowerCase();
         const email = (tenant.email || '').toLowerCase();
         return fullName.includes(searchLower) || email.includes(searchLower);
       });
     }
 
     return allAvailable;
-  }, [tenancies, allTenantUsers, selectedRoom, tenantSearch]);
+  }, [tenancies, allTenantUsers, selectedRoom, debouncedTenantSearch]);
 
   // Helper function to get available capacity
   const getAvailableCapacity = (room: any) => {
@@ -668,6 +685,8 @@ const RoomsPage: React.FC = () => {
             setIsAssignTenantModalOpen(false);
             assignTenantForm.reset();
             setSelectedRoom(null);
+            setTenantSearch('');
+            setDebouncedTenantSearch('');
           }}
           title={`Assign Tenant to ${selectedRoom.roomNumber}`}
         >
@@ -683,7 +702,7 @@ const RoomsPage: React.FC = () => {
                   value={tenantSearch}
                   onChange={(e) => setTenantSearch(e.target.value)}
                   placeholder="Type to search tenants..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               
@@ -691,12 +710,12 @@ const RoomsPage: React.FC = () => {
                 <>
                   <select
                     {...assignTenantForm.register('tenantId')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">-- Select a tenant --</option>
                     {availableTenantsForAssigning.map((tenant: any) => (
                       <option key={tenant.id || tenant._id} value={tenant.id || tenant._id}>
-                        {tenant.firstName} {tenant.lastName} ({tenant.email})
+                        {tenant.firstName} {tenant.lastName}
                       </option>
                     ))}
                   </select>
@@ -706,8 +725,8 @@ const RoomsPage: React.FC = () => {
                 </>
               ) : (
                 <div className="border border-gray-300 rounded-md px-3 py-2 bg-gray-50">
-                  <p className="text-sm text-gray-500">
-                    {tenantSearch ? `No tenants found matching "${tenantSearch}"` : 'No tenants available'}
+                  <p className="text-sm text-gray-500 text-center">
+                    {tenantSearch ? 'No tenants found' : 'No tenants available'}
                   </p>
                 </div>
               )}
