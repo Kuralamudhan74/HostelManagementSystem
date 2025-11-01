@@ -235,6 +235,8 @@ export interface IPayment extends Document {
   amount: number;
   paymentMethod: 'cash' | 'bank_transfer' | 'cheque' | 'other';
   paymentDate: Date;
+  paymentPeriodStart?: Date; // Rent period start date
+  paymentPeriodEnd?: Date; // Rent period end date
   description?: string;
   receiptAttachmentId?: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -246,6 +248,8 @@ const paymentSchema = new Schema<IPayment>({
   amount: { type: Number, required: true },
   paymentMethod: { type: String, enum: ['cash', 'bank_transfer', 'cheque', 'other'], required: true },
   paymentDate: { type: Date, required: true },
+  paymentPeriodStart: { type: Date }, // Optional: rent period start
+  paymentPeriodEnd: { type: Date }, // Optional: rent period end
   description: { type: String },
   receiptAttachmentId: { type: Schema.Types.ObjectId, ref: 'Attachment' }
 }, {

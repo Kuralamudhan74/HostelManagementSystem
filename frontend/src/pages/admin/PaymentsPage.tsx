@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DollarSign, ArrowLeft, Plus, Calendar, User } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -11,20 +11,48 @@ import toast from 'react-hot-toast';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { 
+  calculateCurrentRentPeriod, 
+  calculateCurrentRentPeriodWithPayments,
+  calculateNextPeriodFromManualEnd,
+  formatDateForDisplay,
+  getPaymentStatus,
+  isPaymentPeriodValid,
+  normalizeDate,
+  type PaymentStatusInfo
+} from '../../utils/rentPeriodUtils';
 
 const paymentSchema = z.object({
   tenantId: z.string().min(1, 'Tenant is required'),
   amount: z.number().min(0.01, 'Amount must be greater than 0'),
   paymentMethod: z.enum(['cash', 'bank_transfer', 'cheque', 'other']),
   paymentDate: z.string().min(1, 'Payment date is required'),
+  paymentPeriodStart: z.string().optional(),
+  paymentPeriodEnd: z.string().optional(),
   description: z.string().optional(),
+}).refine((data) => {
+  // Validate that period start is before period end if both are provided
+  if (data.paymentPeriodStart && data.paymentPeriodEnd) {
+    const start = new Date(data.paymentPeriodStart);
+    const end = new Date(data.paymentPeriodEnd);
+    return start < end;
+  }
+  return true;
+}, {
+  message: 'Period Start must be before Period End',
+  path: ['paymentPeriodEnd'],
 });
 
 const PaymentsPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   
-  const [isRecordPaymentModalOpen, setIsRecordPaymentModalOpen] = useState(false);
+  // Check if we should open payment modal from navigation state
+  const [isRecordPaymentModalOpen, setIsRecordPaymentModalOpen] = useState(
+    location.state?.openPaymentModal || false
+  );
+  
   const [filterTenantId, setFilterTenantId] = useState<string>('');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
   const [filterEndDate, setFilterEndDate] = useState<string>('');
@@ -34,13 +62,19 @@ const PaymentsPage: React.FC = () => {
   const [debouncedStartDate, setDebouncedStartDate] = useState<string>('');
   const [debouncedEndDate, setDebouncedEndDate] = useState<string>('');
 
-  const { register, handleSubmit, formState: { errors }, reset, control, watch } = useForm({
+  const { register, handleSubmit, formState: { errors }, reset, control, watch, setValue } = useForm({
     resolver: zodResolver(paymentSchema),
     defaultValues: {
       paymentMethod: 'cash',
       paymentDate: new Date().toISOString().split('T')[0],
+      paymentPeriodStart: '',
+      paymentPeriodEnd: '',
     }
   });
+
+  const selectedTenantId = watch('tenantId');
+  const periodStart = watch('paymentPeriodStart');
+  const periodEnd = watch('paymentPeriodEnd');
 
   // Debounce filter changes
   useEffect(() => {
@@ -82,16 +116,113 @@ const PaymentsPage: React.FC = () => {
     queryFn: () => apiClient.getTenants({ includeUnassigned: true, limit: 100 }),
   });
 
+  // Fetch payments to check if tenant has paid for current period
+  const { data: allPaymentsData } = useQuery({
+    queryKey: ['admin/payments/all'],
+    queryFn: () => apiClient.getPayments({ limit: 1000 }),
+  });
+
+  // Calculate rent period when tenant is selected
+  const rentPeriodInfo = useMemo(() => {
+    if (!selectedTenantId || !tenantsData?.tenancies) return null;
+    
+    const tenancy = tenantsData.tenancies.find((t: any) => {
+      const tenantId = t.tenantId?.id || t.tenantId?._id || t.tenantId;
+      return tenantId === selectedTenantId && t.isActive;
+    });
+
+    if (!tenancy || !tenancy.startDate) return null;
+
+    const checkInDate = new Date(tenancy.startDate);
+    
+    // Get all payments for this tenant
+    const tenantPayments = (allPaymentsData?.payments || []).filter((payment: any) => {
+      const paymentTenantId = payment.tenantId?.id || payment.tenantId?._id || payment.tenantId;
+      return paymentTenantId === selectedTenantId;
+    });
+    
+    // Calculate current period based on payment history (if any)
+    // This will use the last payment period to determine the current cycle
+    const period = calculateCurrentRentPeriodWithPayments(checkInDate, tenantPayments);
+    
+    // Check if tenant has paid for the CURRENT rent period
+    const hasPayment = tenantPayments.some((payment: any) => {
+      if (!payment.paymentPeriodStart || !payment.paymentPeriodEnd) return false;
+      
+      const payStart = new Date(payment.paymentPeriodStart);
+      const payEnd = new Date(payment.paymentPeriodEnd);
+      
+      // Check if payment period overlaps with current rent period
+      return isPaymentPeriodValid(
+        payStart,
+        payEnd,
+        period.startDate,
+        period.endDate
+      );
+    });
+
+    const statusInfo = getPaymentStatus(period.startDate, period.endDate, hasPayment);
+
+    return {
+      period,
+      statusInfo,
+      tenancy,
+      checkInDate,
+    };
+  }, [selectedTenantId, tenantsData, allPaymentsData]);
+
+  // Auto-fill period dates when tenant is selected
+  useEffect(() => {
+    if (rentPeriodInfo && !periodStart && !periodEnd) {
+      const startDateStr = rentPeriodInfo.period.startDate.toISOString().split('T')[0];
+      const endDateStr = rentPeriodInfo.period.endDate.toISOString().split('T')[0];
+      setValue('paymentPeriodStart', startDateStr);
+      setValue('paymentPeriodEnd', endDateStr);
+    }
+  }, [rentPeriodInfo, periodStart, periodEnd, setValue]);
+
+  // Calculate next period when manual dates are changed
+  const nextPeriodInfo = useMemo(() => {
+    // Only calculate if both period start and end are manually set
+    if (!periodStart || !periodEnd) return null;
+    
+    const start = new Date(periodStart);
+    const end = new Date(periodEnd);
+    
+    // Validate: periodStart must be before periodEnd
+    if (start >= end) return null;
+    
+    // Always calculate next period based on the manual period end
+    // This ensures dynamic adjustment even if dates match initially
+    const nextPeriod = calculateNextPeriodFromManualEnd(end);
+    return {
+      startDate: nextPeriod.startDate,
+      endDate: nextPeriod.endDate,
+    };
+  }, [periodStart, periodEnd]);
+
   const handleRecordPayment = async (data: any) => {
     try {
+      // Validate period dates if both are provided
+      if (data.paymentPeriodStart && data.paymentPeriodEnd) {
+        const periodStart = new Date(data.paymentPeriodStart);
+        const periodEnd = new Date(data.paymentPeriodEnd);
+        if (periodStart >= periodEnd) {
+          toast.error('Period Start must be before Period End');
+          return;
+        }
+      }
+      
       console.log('Recording payment with data:', data);
       
-      // Record payment without allocations first
+      // Record payment with period information
       const formattedData = {
         tenantId: data.tenantId,
         amount: Number(data.amount),
         paymentMethod: data.paymentMethod,
         paymentDate: new Date(data.paymentDate).toISOString(),
+        paymentPeriodStart: data.paymentPeriodStart ? new Date(data.paymentPeriodStart).toISOString() : undefined,
+        paymentPeriodEnd: data.paymentPeriodEnd ? new Date(data.paymentPeriodEnd).toISOString() : undefined,
         description: data.description || '',
         allocations: [], // Start with empty allocations
       };
@@ -103,7 +234,11 @@ const PaymentsPage: React.FC = () => {
       toast.success('Payment recorded successfully');
       setIsRecordPaymentModalOpen(false);
       reset();
+      // Invalidate all payment-related queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['admin/payments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin/payments/all'] });
+      // Also invalidate tenants query to refresh payment status on tenant cards
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
     } catch (error: any) {
       console.error('Record payment error:', error);
       toast.error(error.response?.data?.message || 'Failed to record payment');
@@ -111,7 +246,6 @@ const PaymentsPage: React.FC = () => {
   };
 
   const payments = paymentsData?.payments || [];
-  const tenantId = watch('tenantId');
   const amount = watch('amount');
 
   const paymentMethodLabels = {
@@ -138,6 +272,22 @@ const PaymentsPage: React.FC = () => {
 
     return Array.from(tenantMap.values());
   }, [tenantsData]);
+
+  // Auto-select tenant if passed via navigation state
+  useEffect(() => {
+    if (location.state?.selectedTenantId && uniqueTenants.length > 0) {
+      const tenant = uniqueTenants.find((t: any) => 
+        (t.id || t._id) === location.state.selectedTenantId
+      );
+      if (tenant) {
+        setValue('tenantId', tenant.id || tenant._id);
+      }
+    }
+    // Clear navigation state
+    if (location.state) {
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, uniqueTenants, setValue]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -247,6 +397,9 @@ const PaymentsPage: React.FC = () => {
                         Date
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Period
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Description
                       </th>
                     </tr>
@@ -282,6 +435,17 @@ const PaymentsPage: React.FC = () => {
                             <Calendar className="w-4 h-4 mr-2" />
                             {new Date(payment.paymentDate).toLocaleDateString()}
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-gray-500">
+                            {payment.paymentPeriodStart && payment.paymentPeriodEnd ? (
+                              <>
+                                {new Date(payment.paymentPeriodStart).toLocaleDateString()} - {new Date(payment.paymentPeriodEnd).toLocaleDateString()}
+                              </>
+                            ) : (
+                              'N/A'
+                            )}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm text-gray-500">
@@ -365,6 +529,26 @@ const PaymentsPage: React.FC = () => {
             )}
           </div>
 
+          {/* Rent Period Information */}
+          {rentPeriodInfo && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-blue-900">
+                  Current Rent Period
+                </label>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${rentPeriodInfo.statusInfo.bgColorClass} ${rentPeriodInfo.statusInfo.colorClass}`}>
+                  {rentPeriodInfo.statusInfo.label}
+                </span>
+              </div>
+              <p className="text-sm text-blue-800 mb-3">
+                {formatDateForDisplay(rentPeriodInfo.period.startDate)} → {formatDateForDisplay(rentPeriodInfo.period.endDate)}
+              </p>
+              <p className="text-xs text-blue-700">
+                Check-in Date: {formatDateForDisplay(rentPeriodInfo.checkInDate)}
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Payment Date *
@@ -378,6 +562,56 @@ const PaymentsPage: React.FC = () => {
               <p className="text-red-500 text-xs mt-1">{errors.paymentDate.message as string}</p>
             )}
           </div>
+
+          {/* Rent Period Dates (Manual Override) */}
+          {rentPeriodInfo && (
+            <>
+              <div className="border-t border-gray-200 pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Rent Period Dates (Optional - Auto-filled)
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      Period Start
+                    </label>
+                    <input
+                      type="date"
+                      {...register('paymentPeriodStart')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      Period End
+                    </label>
+                    <input
+                      type="date"
+                      {...register('paymentPeriodEnd')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                </div>
+                {nextPeriodInfo && periodStart && periodEnd && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-xs text-blue-900 font-medium mb-1">
+                      Next due payment for this tenant starts on: <span className="font-semibold">{formatDateForDisplay(nextPeriodInfo.startDate)}</span>
+                    </p>
+                    {nextPeriodInfo.endDate && (
+                      <p className="text-xs text-blue-700 italic">
+                        Next rent cycle: {formatDateForDisplay(nextPeriodInfo.startDate)} → {formatDateForDisplay(nextPeriodInfo.endDate)}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {periodStart && periodEnd && new Date(periodStart) >= new Date(periodEnd) && (
+                  <p className="text-xs text-red-600 mt-2">
+                    ⚠️ Period Start must be before Period End
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -221,6 +221,8 @@ export interface PaymentForm {
   amount: number;
   paymentMethod: 'cash' | 'bank_transfer' | 'cheque' | 'other';
   paymentDate: string;
+  paymentPeriodStart?: string;
+  paymentPeriodEnd?: string;
   description?: string;
   allocations: PaymentAllocationData[];
 }

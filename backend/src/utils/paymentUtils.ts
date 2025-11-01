@@ -11,6 +11,8 @@ export interface PaymentRecordData {
   amount: number;
   paymentMethod: 'cash' | 'bank_transfer' | 'cheque' | 'other';
   paymentDate: Date;
+  paymentPeriodStart?: Date;
+  paymentPeriodEnd?: Date;
   description?: string;
   allocations: PaymentAllocationData[];
 }
@@ -49,6 +51,8 @@ export const recordPaymentWithAllocations = async (data: PaymentRecordData) => {
       amount: data.amount,
       paymentMethod: data.paymentMethod,
       paymentDate: data.paymentDate,
+      paymentPeriodStart: data.paymentPeriodStart,
+      paymentPeriodEnd: data.paymentPeriodEnd,
       description: data.description
     });
 

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ArrowLeft, Search, MapPin, Phone, X, Eye, Upload, Trash2, Filter, Plus } from 'lucide-react';
+import { Users, ArrowLeft, Search, MapPin, Phone, X, Eye, Upload, Trash2, Filter, Plus, DollarSign, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -11,6 +11,13 @@ import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { 
+  calculateCurrentRentPeriod, 
+  calculateCurrentRentPeriodWithPayments,
+  formatDateForDisplay,
+  getPaymentStatus,
+  isPaymentPeriodValid,
+} from '../../utils/rentPeriodUtils';
 
 const assignRoomSchema = z.object({
   roomId: z.string().min(1, 'Room is required'),
@@ -41,6 +48,7 @@ const TenantsPage: React.FC = () => {
     search: '',
     roomNumber: '',
   });
+  const [selectedHostelFilter, setSelectedHostelFilter] = useState<string>('');
 
   const assignRoomForm = useForm({
     resolver: zodResolver(assignRoomSchema),
@@ -64,10 +72,16 @@ const TenantsPage: React.FC = () => {
     queryFn: () => apiClient.getRooms(),
   });
 
-  // Fetch hostels for room selection
+  // Fetch hostels for room selection and filtering
   const { data: hostelsData } = useQuery({
     queryKey: ['hostels'],
     queryFn: () => apiClient.getHostels(),
+  });
+
+  // Fetch payments to check payment status
+  const { data: paymentsData } = useQuery({
+    queryKey: ['admin/payments/all'],
+    queryFn: () => apiClient.getPayments({ limit: 1000 }),
   });
 
 
@@ -248,13 +262,21 @@ const TenantsPage: React.FC = () => {
         !assignedTenantIds.has(tenant._id || tenant.id)
       );
 
-  // Filter results based on search
+  // Filter results based on search and hostel
   const filteredTenancies = useMemo(() => {
     // showPastTenants = true: show only inactive tenancies
     // showPastTenants = false: show only active tenancies
     let filtered = showPastTenants
       ? tenancies.filter((t: any) => t.tenantId?.isActive === false || t.isActive === false)
       : tenancies.filter((t: any) => t.tenantId?.isActive !== false && t.isActive !== false);
+
+    // Filter by hostel
+    if (selectedHostelFilter) {
+      filtered = filtered.filter((tenancy: any) => {
+        const roomHostelId = tenancy.roomId?.hostelId?._id || tenancy.roomId?.hostelId?.id || tenancy.roomId?.hostelId;
+        return roomHostelId === selectedHostelFilter;
+      });
+    }
 
     if (!searchParams.search.trim() && !searchParams.roomNumber.trim()) {
       return filtered;
@@ -283,7 +305,7 @@ const TenantsPage: React.FC = () => {
 
       return true;
     });
-  }, [tenancies, searchParams, showPastTenants]);
+  }, [tenancies, searchParams, showPastTenants, selectedHostelFilter]);
 
   const filteredUnassignedTenants = useMemo(() => {
     if (!searchParams.search.trim()) {
@@ -346,7 +368,7 @@ const TenantsPage: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Search by name
@@ -376,6 +398,23 @@ const TenantsPage: React.FC = () => {
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Filter by Hostel
+              </label>
+              <select
+                value={selectedHostelFilter}
+                onChange={(e) => setSelectedHostelFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Hostels</option>
+                {hostelsData?.hostels?.map((hostel: any) => (
+                  <option key={hostel.id || hostel._id} value={hostel.id || hostel._id}>
+                    {hostel.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -410,14 +449,70 @@ const TenantsPage: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Show assigned tenants */}
-            {filteredTenancies.map((tenancy: any) => (
+            {filteredTenancies.map((tenancy: any) => {
+              // Calculate rent period and payment status for this tenant
+              const tenantId = tenancy.tenantId?.id || tenancy.tenantId?._id || tenancy.tenantId;
+              let rentPeriodInfo: any = null;
+              let paymentStatusInfo: any = null;
+
+              if (!showPastTenants && tenancy.isActive && tenancy.startDate) {
+                try {
+                  const checkInDate = new Date(tenancy.startDate);
+                  
+                  // Get all payments for this tenant
+                  const tenantPayments = (paymentsData?.payments || []).filter((payment: any) => {
+                    const paymentTenantId = payment.tenantId?.id || payment.tenantId?._id || payment.tenantId;
+                    return paymentTenantId === tenantId;
+                  });
+                  
+                  // Calculate current period based on payment history (if any)
+                  // This will use the last payment period to determine the current cycle
+                  const period = calculateCurrentRentPeriodWithPayments(checkInDate, tenantPayments);
+                  
+                  // Check if tenant has paid for the CURRENT rent period
+                  const hasPayment = tenantPayments.some((payment: any) => {
+                    if (!payment.paymentPeriodStart || !payment.paymentPeriodEnd) return false;
+                    
+                    const payStart = new Date(payment.paymentPeriodStart);
+                    const payEnd = new Date(payment.paymentPeriodEnd);
+                    
+                    // Check if payment period overlaps with current rent period
+                    return isPaymentPeriodValid(
+                      payStart,
+                      payEnd,
+                      period.startDate,
+                      period.endDate
+                    );
+                  });
+
+                  paymentStatusInfo = getPaymentStatus(period.startDate, period.endDate, hasPayment);
+                  rentPeriodInfo = period;
+                } catch (error) {
+                  console.error('Error calculating rent period:', error);
+                }
+              }
+
+              // Determine card border/accent color based on payment status
+              // Use a top accent bar for payment status to avoid conflicts with tenant status colors
+              let paymentStatusBar = '';
+              if (!showPastTenants && paymentStatusInfo) {
+                if (paymentStatusInfo.status === 'paid') {
+                  paymentStatusBar = 'border-t-4 border-green-500';
+                } else if (paymentStatusInfo.status === 'overdue') {
+                  paymentStatusBar = 'border-t-4 border-red-500';
+                } else if (paymentStatusInfo.status === 'due_soon') {
+                  paymentStatusBar = 'border-t-4 border-amber-500';
+                }
+              }
+
+              return (
               <motion.div
                 key={tenancy.id || tenancy._id}
                 className={`rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow ${
                   showPastTenants 
                     ? 'bg-gray-50 border border-gray-200' 
                     : 'bg-white'
-                }`}
+                } ${paymentStatusBar}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
               >
@@ -466,6 +561,29 @@ const TenantsPage: React.FC = () => {
                       <span>Room {tenancy.roomId?.roomNumber || 'N/A'}</span>
                     )}
                   </div>
+                  {/* Rent Period and Payment Status */}
+                  {rentPeriodInfo && paymentStatusInfo && (
+                    <>
+                      <div className="flex items-center text-sm text-gray-600 mt-3 pt-3 border-t border-gray-100">
+                        <Calendar className="w-4 h-4 mr-2" />
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">
+                            Rent Period: {formatDateForDisplay(rentPeriodInfo.startDate)} → {formatDateForDisplay(rentPeriodInfo.endDate)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${paymentStatusInfo.bgColorClass} ${paymentStatusInfo.colorClass}`}>
+                          {paymentStatusInfo.label}
+                        </span>
+                        {paymentStatusInfo.status === 'due_soon' && paymentStatusInfo.label === 'Pending' && (
+                          <span className="text-xs text-gray-500 italic">
+                            (No payment recorded for this period)
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t border-gray-200">
@@ -492,6 +610,24 @@ const TenantsPage: React.FC = () => {
                       <Eye className="w-4 h-4 mr-2" />
                       View
                     </Button>
+                    {!showPastTenants && rentPeriodInfo && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="flex-1 min-w-[120px] bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                        onClick={() => {
+                          navigate('/admin/payments', { 
+                            state: { 
+                              selectedTenantId: tenantId,
+                              openPaymentModal: true 
+                            } 
+                          });
+                        }}
+                      >
+                        <DollarSign className="w-4 h-4 mr-2" />
+                        Record Payment
+                      </Button>
+                    )}
                     {showPastTenants ? (
                       <Button
                         variant="primary"
@@ -530,7 +666,8 @@ const TenantsPage: React.FC = () => {
                   </div>
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
 
             {/* Show unassigned tenants */}
             {filteredUnassignedTenants.map((tenant: any) => (

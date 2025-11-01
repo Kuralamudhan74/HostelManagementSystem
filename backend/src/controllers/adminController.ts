@@ -509,7 +509,16 @@ export const getTenants = async (req: AuthRequest, res: Response) => {
 // Payment management
 export const recordPayment = async (req: AuthRequest, res: Response) => {
   try {
-    const { tenantId, amount, paymentMethod, paymentDate, description, allocations = [] } = req.body;
+    const { 
+      tenantId, 
+      amount, 
+      paymentMethod, 
+      paymentDate, 
+      paymentPeriodStart,
+      paymentPeriodEnd,
+      description, 
+      allocations = [] 
+    } = req.body;
 
     let finalAllocations = allocations;
 
@@ -568,6 +577,8 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
       amount,
       paymentMethod,
       paymentDate: new Date(paymentDate),
+      paymentPeriodStart: paymentPeriodStart ? new Date(paymentPeriodStart) : undefined,
+      paymentPeriodEnd: paymentPeriodEnd ? new Date(paymentPeriodEnd) : undefined,
       description,
       allocations: finalAllocations
     });
