@@ -9,6 +9,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import apiClient from '../../services/api';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
+import { formatCurrency } from '../../utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
@@ -433,7 +434,7 @@ const RoomsPage: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600">Monthly Rent</span>
-                      <span className="font-medium">${room.rentAmount}</span>
+                      <span className="font-medium">{formatCurrency(room.rentAmount)}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600">Available</span>
@@ -466,13 +467,13 @@ const RoomsPage: React.FC = () => {
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600">Current EB Bill</span>
                       <span className="font-medium">
-                        ${(() => {
+                        {(() => {
                           const currentDate = new Date();
                           const currentPeriod = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
                           const currentBill = ebBillsData?.ebBills?.find((bill: any) => 
                             bill.roomId?._id === room._id && bill.period === currentPeriod
                           );
-                          return currentBill ? currentBill.amount.toFixed(2) : '0.00';
+                          return currentBill ? formatCurrency(currentBill.amount) : formatCurrency(0);
                         })()}
                       </span>
                     </div>
@@ -490,7 +491,7 @@ const RoomsPage: React.FC = () => {
                                 {tenancy.tenantId?.firstName} {tenancy.tenantId?.lastName}
                               </span>
                             </div>
-                            <span className="text-gray-600">${tenancy.tenantShare || 0}/mo</span>
+                            <span className="text-gray-600">{formatCurrency(tenancy.tenantShare || 0)}/mo</span>
                           </div>
                         ))}
                       </div>
@@ -622,7 +623,7 @@ const RoomsPage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Monthly Rent ($) *
+              Monthly Rent (₹) *
             </label>
             <input
               type="number"
@@ -756,7 +757,7 @@ const RoomsPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Monthly Share ($) *
+                Monthly Share (₹) *
               </label>
               <input
                 type="number"
@@ -923,7 +924,7 @@ const RoomsPage: React.FC = () => {
               <p className="text-sm text-blue-800 mt-2">
                 Active Tenants: <strong>{getTenantsForRoom(selectedRoom.id).length}</strong> 
                 <span className="text-xs ml-2">
-                  (EB will be divided equally: ${ebBillAmount ? (parseFloat(ebBillAmount) / getTenantsForRoom(selectedRoom.id).length).toFixed(2) : '0.00'} per tenant)
+                  (EB will be divided equally: {ebBillAmount ? formatCurrency(parseFloat(ebBillAmount) / getTenantsForRoom(selectedRoom.id).length) : formatCurrency(0)} per tenant)
                 </span>
               </p>
             )}

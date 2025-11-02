@@ -19,6 +19,7 @@ import Button from '../../components/Button';
 import Modal from '../../components/Modal';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { formatCurrency } from '../../utils';
 
 const AdminDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -141,7 +142,7 @@ const AdminDashboard: React.FC = () => {
     },
     {
       title: 'Monthly Revenue',
-      value: `$${dashboardStats?.monthlyRevenue || '0.00'}`,
+      value: formatCurrency(parseFloat(dashboardStats?.monthlyRevenue || '0')),
       icon: DollarSign,
       color: 'bg-yellow-500',
     },

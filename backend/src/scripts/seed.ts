@@ -11,7 +11,9 @@ import {
   ExpenseCategory,
   Expense,
   InventoryItem,
-  RoomInventory
+  RoomInventory,
+  Payment,
+  PaymentAllocation
 } from '../models';
 import { hashPassword } from '../middleware/auth';
 
@@ -34,6 +36,8 @@ const seedData = async () => {
       Tenancy.deleteMany({}),
       MonthlyRent.deleteMany({}),
       Bill.deleteMany({}),
+      PaymentAllocation.deleteMany({}),
+      Payment.deleteMany({}),
       ExpenseCategory.deleteMany({}),
       Expense.deleteMany({}),
       InventoryItem.deleteMany({}),
@@ -47,9 +51,9 @@ const seedData = async () => {
     const admin = new User({
       email: 'admin@hostel.com',
       password: adminPassword,
-      firstName: 'Admin',
-      lastName: 'User',
-      phone: '+1234567890',
+      firstName: 'Rajesh',
+      lastName: 'Kumar',
+      phone: '+919876543210',
       role: 'admin',
       isActive: true
     });
@@ -58,44 +62,89 @@ const seedData = async () => {
 
     // Create owner
     const owner = new Owner({
-      name: 'John Smith',
+      name: 'Priya Sharma',
       email: 'owner@hostel.com',
-      phone: '+1234567891',
-      address: '123 Main Street, City, State 12345'
+      phone: '+919876543211',
+      address: '123 MG Road, Bangalore, Karnataka 560001'
     });
     await owner.save();
     console.log('Created owner');
 
-    // Create hostel
-    const hostel = new Hostel({
-      name: 'Sunshine Hostel',
-      address: '456 Hostel Avenue, City, State 12345',
-      ownerId: owner._id,
-      totalRooms: 3,
-      isActive: true
-    });
-    await hostel.save();
-    console.log('Created hostel');
+    // Create hostels
+    const hostels = [
+      {
+        name: 'Green Valley Hostel',
+        address: '456 Brigade Road, Bangalore, Karnataka 560001',
+        ownerId: owner._id,
+        totalRooms: 0,
+        isActive: true
+      },
+      {
+        name: 'Sunrise Boys Hostel',
+        address: '789 Indira Nagar, Bangalore, Karnataka 560038',
+        ownerId: owner._id,
+        totalRooms: 0,
+        isActive: true
+      }
+    ];
 
-    // Create rooms
+    const createdHostels = [];
+    for (const hostelData of hostels) {
+      const hostel = new Hostel(hostelData);
+      await hostel.save();
+      createdHostels.push(hostel);
+    }
+    console.log('Created hostels');
+
+    // Create rooms for Green Valley Hostel
     const rooms = [
       {
         roomNumber: '101',
-        hostelId: hostel._id,
+        hostelId: createdHostels[0]._id,
         capacity: 2,
-        rentAmount: 500
+        rentAmount: 8000,
+        isAC: false,
+        bathroomAttached: true
       },
       {
         roomNumber: '102',
-        hostelId: hostel._id,
-        capacity: 1,
-        rentAmount: 400
+        hostelId: createdHostels[0]._id,
+        capacity: 3,
+        rentAmount: 12000,
+        isAC: false,
+        bathroomAttached: true
       },
       {
         roomNumber: '103',
-        hostelId: hostel._id,
+        hostelId: createdHostels[0]._id,
+        capacity: 1,
+        rentAmount: 6000,
+        isAC: true,
+        bathroomAttached: true
+      },
+      {
+        roomNumber: '201',
+        hostelId: createdHostels[0]._id,
+        capacity: 2,
+        rentAmount: 9000,
+        isAC: true,
+        bathroomAttached: true
+      },
+      {
+        roomNumber: '301',
+        hostelId: createdHostels[1]._id,
+        capacity: 2,
+        rentAmount: 7500,
+        isAC: false,
+        bathroomAttached: false
+      },
+      {
+        roomNumber: '302',
+        hostelId: createdHostels[1]._id,
         capacity: 3,
-        rentAmount: 750
+        rentAmount: 11000,
+        isAC: false,
+        bathroomAttached: true
       }
     ];
 
@@ -105,44 +154,181 @@ const seedData = async () => {
       await room.save();
       createdRooms.push(room);
     }
+    
+    // Update hostel room counts
+    await Hostel.findByIdAndUpdate(createdHostels[0]._id, { totalRooms: 4 });
+    await Hostel.findByIdAndUpdate(createdHostels[1]._id, { totalRooms: 2 });
+    
     console.log('Created rooms');
 
-    // Create tenant users
+    // Create tenant users with Indian names and details
     const tenantPassword = await hashPassword('tenant123');
     const tenants = [
       {
-        email: 'tenant1@hostel.com',
+        email: 'arjun.reddy@email.com',
         password: tenantPassword,
-        firstName: 'Alice',
-        lastName: 'Johnson',
-        phone: '+1234567892',
+        firstName: 'Arjun',
+        lastName: 'Reddy',
+        phone: '+919876543212',
+        tenantId: 'T001',
+        fatherName: 'Ramesh Reddy',
+        dateOfBirth: '2000-05-15',
+        whatsappNumber: '+919876543212',
+        permanentAddress: '123 Park Street, Hyderabad, Telangana 500001',
+        city: 'Hyderabad',
+        state: 'Telangana',
+        aadharNumber: '1234 5678 9012',
+        occupation: 'Student',
+        collegeCompanyName: 'IIT Bangalore',
+        officeAddress: 'IIT Bangalore Campus, Bangalore',
+        expectedDurationStay: '4 years',
+        emergencyContactName: 'Ramesh Reddy',
+        emergencyContactNumber: '+919876543220',
+        emergencyContactRelation: 'Father',
         role: 'tenant',
         isActive: true
       },
       {
-        email: 'tenant2@hostel.com',
+        email: 'priya.patel@email.com',
         password: tenantPassword,
-        firstName: 'Bob',
-        lastName: 'Wilson',
-        phone: '+1234567893',
+        firstName: 'Priya',
+        lastName: 'Patel',
+        phone: '+919876543213',
+        tenantId: 'T002',
+        fatherName: 'Mahesh Patel',
+        dateOfBirth: '2001-08-20',
+        whatsappNumber: '+919876543213',
+        permanentAddress: '456 Gandhi Road, Ahmedabad, Gujarat 380001',
+        city: 'Ahmedabad',
+        state: 'Gujarat',
+        aadharNumber: '2345 6789 0123',
+        occupation: 'Student',
+        collegeCompanyName: 'NIT Bangalore',
+        officeAddress: 'NIT Bangalore Campus, Bangalore',
+        expectedDurationStay: '3 years',
+        emergencyContactName: 'Mahesh Patel',
+        emergencyContactNumber: '+919876543221',
+        emergencyContactRelation: 'Father',
         role: 'tenant',
         isActive: true
       },
       {
-        email: 'tenant3@hostel.com',
+        email: 'rahul.sharma@email.com',
         password: tenantPassword,
-        firstName: 'Charlie',
-        lastName: 'Brown',
-        phone: '+1234567894',
+        firstName: 'Rahul',
+        lastName: 'Sharma',
+        phone: '+919876543214',
+        tenantId: 'T003',
+        fatherName: 'Vikash Sharma',
+        dateOfBirth: '1999-12-10',
+        whatsappNumber: '+919876543214',
+        permanentAddress: '789 Sector 5, Noida, Uttar Pradesh 201301',
+        city: 'Noida',
+        state: 'Uttar Pradesh',
+        aadharNumber: '3456 7890 1234',
+        occupation: 'Employee',
+        collegeCompanyName: 'Tech Solutions Pvt Ltd',
+        officeAddress: 'IT Park, Whitefield, Bangalore',
+        expectedDurationStay: '2 years',
+        emergencyContactName: 'Vikash Sharma',
+        emergencyContactNumber: '+919876543222',
+        emergencyContactRelation: 'Father',
         role: 'tenant',
         isActive: true
       },
       {
-        email: 'tenant4@hostel.com',
+        email: 'kavya.nair@email.com',
         password: tenantPassword,
-        firstName: 'Diana',
-        lastName: 'Davis',
-        phone: '+1234567895',
+        firstName: 'Kavya',
+        lastName: 'Nair',
+        phone: '+919876543215',
+        tenantId: 'T004',
+        fatherName: 'Suresh Nair',
+        dateOfBirth: '2002-03-25',
+        whatsappNumber: '+919876543215',
+        permanentAddress: '321 MG Road, Kochi, Kerala 682001',
+        city: 'Kochi',
+        state: 'Kerala',
+        aadharNumber: '4567 8901 2345',
+        occupation: 'Student',
+        collegeCompanyName: 'Bangalore University',
+        officeAddress: 'Bangalore University Campus, Bangalore',
+        expectedDurationStay: '3 years',
+        emergencyContactName: 'Suresh Nair',
+        emergencyContactNumber: '+919876543223',
+        emergencyContactRelation: 'Father',
+        role: 'tenant',
+        isActive: true
+      },
+      {
+        email: 'suresh.kumar@email.com',
+        password: tenantPassword,
+        firstName: 'Suresh',
+        lastName: 'Kumar',
+        phone: '+919876543216',
+        tenantId: 'T005',
+        fatherName: 'Rajesh Kumar',
+        dateOfBirth: '2000-07-18',
+        whatsappNumber: '+919876543216',
+        permanentAddress: '654 Nehru Street, Chennai, Tamil Nadu 600001',
+        city: 'Chennai',
+        state: 'Tamil Nadu',
+        aadharNumber: '5678 9012 3456',
+        occupation: 'Student',
+        collegeCompanyName: 'VIT Bangalore',
+        officeAddress: 'VIT Bangalore Campus, Bangalore',
+        expectedDurationStay: '4 years',
+        emergencyContactName: 'Rajesh Kumar',
+        emergencyContactNumber: '+919876543224',
+        emergencyContactRelation: 'Father',
+        role: 'tenant',
+        isActive: true
+      },
+      {
+        email: 'divya.singh@email.com',
+        password: tenantPassword,
+        firstName: 'Divya',
+        lastName: 'Singh',
+        phone: '+919876543217',
+        tenantId: 'T006',
+        fatherName: 'Amit Singh',
+        dateOfBirth: '2001-11-05',
+        whatsappNumber: '+919876543217',
+        permanentAddress: '987 MG Road, Jaipur, Rajasthan 302001',
+        city: 'Jaipur',
+        state: 'Rajasthan',
+        aadharNumber: '6789 0123 4567',
+        occupation: 'Student',
+        collegeCompanyName: 'Bangalore Institute of Technology',
+        officeAddress: 'BIT Campus, Bangalore',
+        expectedDurationStay: '3 years',
+        emergencyContactName: 'Amit Singh',
+        emergencyContactNumber: '+919876543225',
+        emergencyContactRelation: 'Father',
+        role: 'tenant',
+        isActive: true
+      },
+      {
+        email: 'mohit.gupta@email.com',
+        password: tenantPassword,
+        firstName: 'Mohit',
+        lastName: 'Gupta',
+        phone: '+919876543218',
+        tenantId: 'T007',
+        fatherName: 'Sunil Gupta',
+        dateOfBirth: '1999-09-30',
+        whatsappNumber: '+919876543218',
+        permanentAddress: '147 Ring Road, Delhi, Delhi 110001',
+        city: 'Delhi',
+        state: 'Delhi',
+        aadharNumber: '7890 1234 5678',
+        occupation: 'Employee',
+        collegeCompanyName: 'Infosys Technologies',
+        officeAddress: 'Infosys Campus, Electronic City, Bangalore',
+        expectedDurationStay: '2 years',
+        emergencyContactName: 'Sunil Gupta',
+        emergencyContactNumber: '+919876543226',
+        emergencyContactRelation: 'Father',
         role: 'tenant',
         isActive: true
       }
@@ -157,33 +343,58 @@ const seedData = async () => {
     console.log('Created tenant users');
 
     // Create tenancies
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    const startOfCurrentYear = new Date(currentYear, 0, 1);
+    
     const tenancies = [
       {
-        roomId: createdRooms[0]._id, // Room 101
-        tenantId: createdTenants[0]._id, // Alice
-        startDate: new Date('2024-01-01'),
-        tenantShare: 250, // Half of 500
+        roomId: createdRooms[0]._id, // Room 101 (2 capacity)
+        tenantId: createdTenants[0]._id, // Arjun
+        startDate: new Date(currentYear, currentMonth - 2, 1), // 2 months ago
+        tenantShare: 4000, // Half of 8000
         isActive: true
       },
       {
         roomId: createdRooms[0]._id, // Room 101
-        tenantId: createdTenants[1]._id, // Bob
-        startDate: new Date('2024-01-15'),
-        tenantShare: 250, // Half of 500
+        tenantId: createdTenants[1]._id, // Priya
+        startDate: new Date(currentYear, currentMonth - 1, 15), // 1 month ago
+        tenantShare: 4000, // Half of 8000
+        isActive: true
+      },
+      {
+        roomId: createdRooms[1]._id, // Room 102 (3 capacity)
+        tenantId: createdTenants[2]._id, // Rahul
+        startDate: new Date(currentYear, currentMonth - 3, 1), // 3 months ago
+        tenantShare: 4000, // One third of 12000
         isActive: true
       },
       {
         roomId: createdRooms[1]._id, // Room 102
-        tenantId: createdTenants[2]._id, // Charlie
-        startDate: new Date('2024-02-01'),
-        tenantShare: 400, // Full amount
+        tenantId: createdTenants[3]._id, // Kavya
+        startDate: new Date(currentYear, currentMonth - 2, 10), // 2 months ago
+        tenantShare: 4000, // One third of 12000
         isActive: true
       },
       {
-        roomId: createdRooms[2]._id, // Room 103
-        tenantId: createdTenants[3]._id, // Diana
-        startDate: new Date('2024-01-01'),
-        tenantShare: 250, // One third of 750
+        roomId: createdRooms[1]._id, // Room 102
+        tenantId: createdTenants[4]._id, // Suresh
+        startDate: new Date(currentYear, currentMonth - 1, 5), // 1 month ago
+        tenantShare: 4000, // One third of 12000
+        isActive: true
+      },
+      {
+        roomId: createdRooms[2]._id, // Room 103 (1 capacity - single)
+        tenantId: createdTenants[5]._id, // Divya
+        startDate: new Date(currentYear, currentMonth - 4, 1), // 4 months ago
+        tenantShare: 6000, // Full amount
+        isActive: true
+      },
+      {
+        roomId: createdRooms[5]._id, // Room 302 (3 capacity) - Sunrise Hostel
+        tenantId: createdTenants[6]._id, // Mohit
+        startDate: new Date(currentYear, currentMonth - 1, 1), // 1 month ago
+        tenantShare: 3667, // One third of 11000
         isActive: true
       }
     ];
@@ -274,18 +485,39 @@ const seedData = async () => {
     // Create some expenses
     const expenses = [
       {
-        hostelId: hostel._id,
+        hostelId: createdHostels[0]._id,
         categoryId: createdCategories[0]._id, // Maintenance
-        amount: 200,
+        amount: 5000,
         description: 'Plumbing repair in room 101',
-        expenseDate: new Date('2024-01-10')
+        expenseDate: new Date(currentYear, currentMonth - 2, 10)
       },
       {
-        hostelId: hostel._id,
+        hostelId: createdHostels[0]._id,
         categoryId: createdCategories[1]._id, // Utilities
-        amount: 150,
+        amount: 12000,
         description: 'Monthly electricity bill',
-        expenseDate: new Date('2024-01-15')
+        expenseDate: new Date(currentYear, currentMonth - 1, 5)
+      },
+      {
+        hostelId: createdHostels[0]._id,
+        categoryId: createdCategories[2]._id, // Cleaning
+        amount: 3000,
+        description: 'Monthly cleaning supplies',
+        expenseDate: new Date(currentYear, currentMonth - 1, 1)
+      },
+      {
+        hostelId: createdHostels[1]._id,
+        categoryId: createdCategories[1]._id, // Utilities
+        amount: 8000,
+        description: 'Monthly electricity and water bill',
+        expenseDate: new Date(currentYear, currentMonth - 1, 3)
+      },
+      {
+        hostelId: createdHostels[0]._id,
+        categoryId: createdCategories[0]._id, // Maintenance
+        amount: 3500,
+        description: 'AC servicing for room 103',
+        expenseDate: new Date(currentYear, currentMonth - 1, 15)
       }
     ];
 
@@ -348,12 +580,15 @@ const seedData = async () => {
 
     console.log('\n=== Seed Data Summary ===');
     console.log('Admin User: admin@hostel.com / admin123');
-    console.log('Tenant Users: tenant1@hostel.com, tenant2@hostel.com, tenant3@hostel.com, tenant4@hostel.com / tenant123');
-    console.log('Hostel: Sunshine Hostel');
-    console.log('Rooms: 101 (2 tenants), 102 (1 tenant), 103 (1 tenant)');
+    console.log('Tenant Users: 7 tenants created with Indian details / tenant123');
+    console.log('Hostels: Green Valley Hostel (4 rooms), Sunrise Boys Hostel (2 rooms)');
+    console.log('Rooms: Multiple rooms with varying capacities and amenities');
+    console.log(`Rooms: 101 (2 tenants), 102 (3 tenants), 103 (1 tenant), 201 (0 tenants), 301 (0 tenants), 302 (1 tenant)`);
     console.log('Monthly rents created for last 4 months');
     console.log('Sample bills and expenses created');
     console.log('Inventory items and room assignments created');
+    console.log('\nCurrency: All amounts are in Indian Rupees (₹)');
+    console.log('\n✅ Seed data generation completed successfully!');
 
   } catch (error) {
     console.error('Seed data error:', error);

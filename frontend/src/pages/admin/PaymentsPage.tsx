@@ -9,6 +9,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import apiClient from '../../services/api';
 import toast from 'react-hot-toast';
 import { useForm, Controller } from 'react-hook-form';
+import { formatCurrency } from '../../utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { 
@@ -422,7 +423,7 @@ const PaymentsPage: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-semibold text-green-600">
-                            ${payment.amount.toFixed(2)}
+                            {formatCurrency(payment.amount)}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -494,7 +495,7 @@ const PaymentsPage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Amount ($) *
+              Amount (₹) *
             </label>
             <input
               type="number"

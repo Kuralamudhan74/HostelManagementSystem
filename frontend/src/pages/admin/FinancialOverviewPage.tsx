@@ -87,12 +87,13 @@ const FinancialOverviewPage: React.FC = () => {
     return Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month));
   }, [financialData]);
 
-  // Format currency
+  // Format currency - using Indian Rupees
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'INR',
       minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   };
 
@@ -308,7 +309,7 @@ const FinancialOverviewPage: React.FC = () => {
                   <YAxis 
                     stroke="#6b7280"
                     style={{ fontSize: '12px' }}
-                    tickFormatter={(value) => `$${value.toLocaleString()}`}
+                    tickFormatter={(value) => `₹${value.toLocaleString('en-IN')}`}
                   />
                   <Tooltip 
                     formatter={(value: number) => formatCurrency(value)}

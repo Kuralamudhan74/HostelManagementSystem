@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ArrowLeft, Search, MapPin, Phone, X, Eye, Upload, Trash2, Filter, Plus, DollarSign, Calendar } from 'lucide-react';
+import { Users, ArrowLeft, Search, MapPin, Phone, X, Eye, Upload, Trash2, Filter, Plus, DollarSign, Calendar, Download } from 'lucide-react';
+import { formatCurrency } from '../../utils';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -350,6 +351,101 @@ const TenantsPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-3">
               <Button
+                onClick={() => {
+                  // Export tenants to CSV based on current filters
+                  const headers = ['Tenant Name', 'Tenant ID', 'Phone', 'Room Number', 'Hostel', 'Status', 'Monthly Share', 'Check-in Date', 'Rent Status'];
+                  const rows: any[] = [];
+
+                  // Add assigned tenants
+                  filteredTenancies.forEach((tenancy: any) => {
+                    const tenantName = `${tenancy.tenantId?.firstName || ''} ${tenancy.tenantId?.lastName || ''}`;
+                    const tenantId = tenancy.tenantId?.tenantId || 'N/A';
+                    const phone = tenancy.tenantId?.phone || 'N/A';
+                    const roomNumber = tenancy.roomId?.roomNumber || 'N/A';
+                    const hostel = tenancy.roomId?.hostelId?.name || 'N/A';
+                    const status = tenancy.isActive ? 'Active' : 'Inactive';
+                    const monthlyShare = (tenancy.tenantShare || 0).toFixed(2);
+                    const checkInDate = tenancy.startDate ? new Date(tenancy.startDate).toLocaleDateString() : 'N/A';
+                    
+                    // Calculate rent status
+                    const tenantIdForPayment = tenancy.tenantId?.id || tenancy.tenantId?._id || tenancy.tenantId;
+                    const tenantPayments = (paymentsData?.payments || []).filter((payment: any) => {
+                      const paymentTenantId = payment.tenantId?.id || payment.tenantId?._id || payment.tenantId;
+                      return paymentTenantId === tenantIdForPayment;
+                    });
+                    
+                    let rentStatus = 'N/A';
+                    if (!showPastTenants && tenancy.isActive && tenancy.startDate) {
+                      try {
+                        const checkInDateObj = new Date(tenancy.startDate);
+                        const period = calculateCurrentRentPeriodWithPayments(checkInDateObj, tenantPayments);
+                        const hasPayment = tenantPayments.some((payment: any) => {
+                          if (!payment.paymentPeriodStart || !payment.paymentPeriodEnd) return false;
+                          return isPaymentPeriodValid(
+                            new Date(payment.paymentPeriodStart),
+                            new Date(payment.paymentPeriodEnd),
+                            period.startDate,
+                            period.endDate
+                          );
+                        });
+                        const statusInfo = getPaymentStatus(period.startDate, period.endDate, hasPayment);
+                        rentStatus = statusInfo.label;
+                      } catch (error) {
+                        rentStatus = 'Unknown';
+                      }
+                    }
+                    
+                    rows.push([
+                      tenantName,
+                      tenantId,
+                      phone,
+                      roomNumber,
+                      hostel,
+                      status,
+                      monthlyShare,
+                      checkInDate,
+                      rentStatus
+                    ]);
+                  });
+
+                  // Add unassigned tenants
+                  filteredUnassignedTenants.forEach((tenant: any) => {
+                    const tenantName = `${tenant.firstName || ''} ${tenant.lastName || ''}`;
+                    const tenantId = tenant.tenantId || 'N/A';
+                    const phone = tenant.phone || 'N/A';
+                    rows.push([
+                      tenantName,
+                      tenantId,
+                      phone,
+                      'Not Assigned',
+                      'N/A',
+                      tenant.isActive ? 'Active' : 'Inactive',
+                      '0.00',
+                      'N/A',
+                      'N/A'
+                    ]);
+                  });
+
+                  const csvContent = [
+                    headers.join(','),
+                    ...rows.map((row) => row.map((cell) => `"${String(cell)}"`).join(',')),
+                  ].join('\n');
+
+                  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `tenants-export-${new Date().getTime()}.csv`;
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  toast.success(`Exported ${rows.length} tenant(s) successfully`);
+                }}
+                variant="secondary"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
+              <Button
                 onClick={() => setIsImportModalOpen(true)}
                 variant="secondary"
               >
@@ -588,7 +684,7 @@ const TenantsPage: React.FC = () => {
 
                 <div className="pt-4 border-t border-gray-200">
                   <p className="text-sm text-gray-600 mb-2">
-                    Monthly Share: <span className="font-semibold">${tenancy.tenantShare || 0}</span>
+                    Monthly Share: <span className="font-semibold">{formatCurrency(tenancy.tenantShare || 0)}</span>
                   </p>
                   <div className="text-xs text-gray-500 mb-3 space-y-1">
                     <p>
@@ -1122,7 +1218,14 @@ const TenantsPage: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">-- Select a room --</option>
-                {roomsData?.rooms?.map((room: any) => {
+                {roomsData?.rooms?.filter((room: any) => {
+                  const roomTenancies = tenantsData?.tenancies?.filter((t: any) => {
+                    const roomIdFromTenancy = t.roomId?.id || t.roomId?._id || t.roomId;
+                    return roomIdFromTenancy === (room.id || room._id) && t.isActive;
+                  }) || [];
+                  const availableCapacity = room.capacity - roomTenancies.length;
+                  return availableCapacity > 0; // Only show rooms with available capacity
+                }).map((room: any) => {
                   const roomTenancies = tenantsData?.tenancies?.filter((t: any) => {
                     const roomIdFromTenancy = t.roomId?.id || t.roomId?._id || t.roomId;
                     return roomIdFromTenancy === (room.id || room._id) && t.isActive;
@@ -1161,7 +1264,7 @@ const TenantsPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Monthly Share ($) *
+                Monthly Share (₹) *
               </label>
               <input
                 type="number"

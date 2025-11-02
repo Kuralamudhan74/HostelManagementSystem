@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, ArrowLeft, Plus, Filter, Calendar, Building2, Tag, TrendingDown } from 'lucide-react';
+import { FileText, ArrowLeft, Plus, Filter, Calendar, Building2, Tag, TrendingDown, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -9,6 +9,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import apiClient from '../../services/api';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
+import { formatCurrency } from '../../utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
@@ -157,6 +158,37 @@ const PaymentsPage: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-3">
+              <Button
+                onClick={() => {
+                  // Export expenses to CSV
+                  const headers = ['Date', 'Hostel', 'Category', 'Description', 'Amount'];
+                  const rows = expenses.map((expense: any) => [
+                    new Date(expense.expenseDate).toLocaleDateString(),
+                    expense.hostelId?.name || 'N/A',
+                    expense.categoryId?.name || 'N/A',
+                    expense.description,
+                    expense.amount.toFixed(2),
+                  ]);
+
+                  const csvContent = [
+                    headers.join(','),
+                    ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
+                  ].join('\n');
+
+                  const blob = new Blob([csvContent], { type: 'text/csv' });
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `expenses-export-${new Date().getTime()}.csv`;
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  toast.success('Expenses exported successfully');
+                }}
+                variant="secondary"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
               <Button
                 onClick={() => setIsCreateCategoryModalOpen(true)}
                 variant="secondary"
@@ -313,7 +345,7 @@ const PaymentsPage: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-semibold text-red-600">
-                            ${expense.amount.toFixed(2)}
+                            {formatCurrency(expense.amount)}
                           </span>
                         </td>
                       </motion.tr>
@@ -378,7 +410,7 @@ const PaymentsPage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Amount ($) *
+              Amount (₹) *
             </label>
             <input
               type="number"
