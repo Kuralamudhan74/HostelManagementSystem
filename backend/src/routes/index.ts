@@ -79,6 +79,10 @@ router.patch('/me', authenticate, updateProfile);
 
 // Admin routes
 router.get('/admin/dashboard/stats', authenticate, requireAdmin, getDashboardStats);
+router.get('/admin/financial-overview', authenticate, requireAdmin, async (req, res, next) => {
+  const { getFinancialOverview } = await import('../controllers/adminController');
+  return getFinancialOverview(req as any, res);
+});
 router.post('/admin/hostels', authenticate, requireAdmin, validate(createHostelSchema), createHostel);
 router.get('/admin/hostels', authenticate, requireAdmin, getHostels);
 router.delete('/admin/hostels/:hostelId', authenticate, requireAdmin, async (req, res, next) => {

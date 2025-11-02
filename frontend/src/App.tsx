@@ -7,6 +7,7 @@ import RoomsPage from './pages/admin/RoomsPage';
 import TenantsPage from './pages/admin/TenantsPage';
 import PaymentsPage from './pages/admin/PaymentsPage';
 import ExpensesPage from './pages/admin/ExpensesPage';
+import FinancialOverviewPage from './pages/admin/FinancialOverviewPage';
 import ProfilePage from './pages/ProfilePage';
 import LoadingSpinner from './components/LoadingSpinner';
 
@@ -70,6 +71,12 @@ const AppRoutes: React.FC = () => {
       <Route path="/admin/expenses" element={
         <ProtectedRoute requiredRole="admin">
           <ExpensesPage />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/admin/financial-overview" element={
+        <ProtectedRoute requiredRole="admin">
+          <FinancialOverviewPage />
         </ProtectedRoute>
       } />
 

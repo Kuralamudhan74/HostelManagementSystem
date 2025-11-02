@@ -291,6 +291,43 @@ class ApiClient {
     return response.data;
   }
 
+  // Financial overview
+  async getFinancialOverview(params?: {
+    year?: number;
+    hostelId?: string;
+    months?: number;
+  }): Promise<{
+    chartData: Array<{
+      month: string;
+      hostelId: string;
+      hostelName: string;
+      income: number;
+      expense: number;
+      profit: number;
+    }>;
+    profitabilityTable: Array<{
+      hostelId: string;
+      hostelName: string;
+      totalIncome: number;
+      totalExpense: number;
+      profit: number;
+      status: string;
+    }>;
+    summary: {
+      totalIncome: number;
+      totalExpense: number;
+      totalProfit: number;
+    };
+    filters: {
+      year: number;
+      hostelId: string | null;
+      months: number;
+    };
+  }> {
+    const response = await this.client.get('/admin/financial-overview', { params });
+    return response.data;
+  }
+
   // EB Bill management
   async createOrUpdateEBBill(data: { roomId: string; amount: number; period: string }): Promise<any> {
     const response = await this.client.post('/admin/eb-bills', data);

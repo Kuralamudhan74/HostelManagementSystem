@@ -1078,6 +1078,246 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
   }
 };
 
+// Get financial overview
+export const getFinancialOverview = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { year, hostelId, months = '3' } = req.query;
+    
+    // Default to current year if not specified
+    const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+    const monthsCount = parseInt(months as string) || 3;
+    
+    // Calculate date range
+    const startDate = new Date(targetYear, 0, 1); // January 1st of target year
+    const endDate = new Date(targetYear, 11, 31, 23, 59, 59); // December 31st of target year
+    
+    // If months is specified and less than 12, calculate the range for last N months
+    let actualStartDate = startDate;
+    let actualEndDate = endDate;
+    
+    if (monthsCount < 12) {
+      // Get last N months from end of target year
+      actualEndDate = new Date(targetYear, 11, 31, 23, 59, 59);
+      const startMonth = Math.max(0, 11 - (monthsCount - 1));
+      actualStartDate = new Date(targetYear, startMonth, 1);
+    }
+    
+    // Get all payments - filter by payment date or payment period
+    const payments = await Payment.find({
+      $or: [
+        { paymentDate: { $gte: actualStartDate, $lte: actualEndDate } },
+        { paymentPeriodStart: { $gte: actualStartDate, $lte: actualEndDate } },
+        { paymentPeriodEnd: { $gte: actualStartDate, $lte: actualEndDate } }
+      ]
+    });
+    
+    // Get all expenses
+    const expensesQuery: any = {
+      expenseDate: { $gte: actualStartDate, $lte: actualEndDate }
+    };
+    
+    if (hostelId) {
+      expensesQuery.hostelId = hostelId;
+    }
+    
+    const expenses = await Expense.find(expensesQuery)
+      .populate('hostelId', 'name address');
+    
+    // Get all hostels (or specific hostel if filtered) - we'll initialize with hostels from data
+    const hostelsQuery: any = { isActive: true };
+    if (hostelId) {
+      hostelsQuery._id = hostelId;
+    }
+    const hostels = await Hostel.find(hostelsQuery);
+    
+    // Get all active tenancies with populated room and hostel for faster lookup
+    const allTenancies = await Tenancy.find({ isActive: true })
+      .populate({
+        path: 'roomId',
+        populate: {
+          path: 'hostelId'
+        }
+      });
+    
+    // Create a map for quick lookup: tenantId -> hostelId
+    const tenantToHostelMap: Record<string, string> = {};
+    allTenancies.forEach((tenancy: any) => {
+      const tenantId = tenancy.tenantId?.toString();
+      const hostelIdFromTenancy = tenancy.roomId?.hostelId?._id?.toString();
+      if (tenantId && hostelIdFromTenancy) {
+        tenantToHostelMap[tenantId] = hostelIdFromTenancy;
+      }
+    });
+    
+    // Helper function to get month key (YYYY-MM)
+    const getMonthKey = (date: Date): string => {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    };
+    
+    // Initialize data structures
+    const monthlyData: Record<string, Record<string, { income: number; expense: number; profit: number }>> = {};
+    const hostelTotals: Record<string, { name: string; totalIncome: number; totalExpense: number; totalProfit: number }> = {};
+    
+    // Initialize hostel totals with all hostels from query
+    hostels.forEach((hostel) => {
+      const hostelIdStr = hostel._id.toString();
+      hostelTotals[hostelIdStr] = {
+        name: hostel.name,
+        totalIncome: 0,
+        totalExpense: 0,
+        totalProfit: 0
+      };
+    });
+    
+    // Process payments (Income)
+    for (const payment of payments) {
+      const paymentTenantId = (payment.tenantId as any)?._id?.toString() || payment.tenantId?.toString();
+      const hostelIdFromTenancy = tenantToHostelMap[paymentTenantId];
+      
+      if (hostelIdFromTenancy && (!hostelId || hostelId === hostelIdFromTenancy)) {
+        // Determine which month this payment belongs to
+        // Priority: paymentPeriodStart > paymentDate
+        let paymentMonth: Date;
+        if (payment.paymentPeriodStart) {
+          paymentMonth = new Date(payment.paymentPeriodStart);
+        } else {
+          paymentMonth = new Date(payment.paymentDate);
+        }
+        
+        const monthKey = getMonthKey(paymentMonth);
+        
+        // Only process if within date range
+        if (paymentMonth >= actualStartDate && paymentMonth <= actualEndDate) {
+          // Initialize hostel total if not exists
+          if (!hostelTotals[hostelIdFromTenancy]) {
+            const hostel = await Hostel.findById(hostelIdFromTenancy);
+            if (hostel) {
+              hostelTotals[hostelIdFromTenancy] = {
+                name: hostel.name,
+                totalIncome: 0,
+                totalExpense: 0,
+                totalProfit: 0
+              };
+            } else {
+              continue; // Skip if hostel not found
+            }
+          }
+          
+          if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = {};
+          }
+          
+          if (!monthlyData[monthKey][hostelIdFromTenancy]) {
+            monthlyData[monthKey][hostelIdFromTenancy] = { income: 0, expense: 0, profit: 0 };
+          }
+          
+          monthlyData[monthKey][hostelIdFromTenancy].income += payment.amount;
+          
+          // Update hostel totals
+          hostelTotals[hostelIdFromTenancy].totalIncome += payment.amount;
+        }
+      }
+    }
+    
+    // Process expenses
+    for (const expense of expenses) {
+      const expenseDate = new Date(expense.expenseDate);
+      const monthKey = getMonthKey(expenseDate);
+      const hostelIdStr = (expense.hostelId as any)._id?.toString() || expense.hostelId?.toString();
+      
+      // Initialize hostel total if not exists
+      if (!hostelTotals[hostelIdStr]) {
+        const hostel = await Hostel.findById(hostelIdStr);
+        if (hostel) {
+          hostelTotals[hostelIdStr] = {
+            name: hostel.name,
+            totalIncome: 0,
+            totalExpense: 0,
+            totalProfit: 0
+          };
+        } else {
+          continue; // Skip if hostel not found
+        }
+      }
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {};
+      }
+      
+      if (!monthlyData[monthKey][hostelIdStr]) {
+        monthlyData[monthKey][hostelIdStr] = { income: 0, expense: 0, profit: 0 };
+      }
+      
+      monthlyData[monthKey][hostelIdStr].expense += expense.amount;
+      
+      // Update hostel totals
+      hostelTotals[hostelIdStr].totalExpense += expense.amount;
+    }
+    
+    // Calculate profit and format data
+    const chartData: Array<{
+      month: string;
+      hostelId: string;
+      hostelName: string;
+      income: number;
+      expense: number;
+      profit: number;
+    }> = [];
+    
+    Object.keys(monthlyData).sort().forEach((monthKey) => {
+      Object.keys(monthlyData[monthKey]).forEach((hid) => {
+        const data = monthlyData[monthKey][hid];
+        data.profit = data.income - data.expense;
+        
+        chartData.push({
+          month: monthKey,
+          hostelId: hid,
+          hostelName: hostelTotals[hid]?.name || 'Unknown',
+          income: data.income,
+          expense: data.expense,
+          profit: data.profit
+        });
+      });
+    });
+    
+    // Calculate totals for each hostel
+    Object.keys(hostelTotals).forEach((hid) => {
+      hostelTotals[hid].totalProfit = hostelTotals[hid].totalIncome - hostelTotals[hid].totalExpense;
+    });
+    
+    // Format profitability table
+    const profitabilityTable = Object.keys(hostelTotals).map((hid) => ({
+      hostelId: hid,
+      hostelName: hostelTotals[hid].name,
+      totalIncome: hostelTotals[hid].totalIncome,
+      totalExpense: hostelTotals[hid].totalExpense,
+      profit: hostelTotals[hid].totalProfit,
+      status: hostelTotals[hid].totalProfit >= 0 ? 'Profit' : 'Loss'
+    }));
+    
+    res.json({
+      chartData,
+      profitabilityTable,
+      summary: {
+        totalIncome: Object.values(hostelTotals).reduce((sum, h) => sum + h.totalIncome, 0),
+        totalExpense: Object.values(hostelTotals).reduce((sum, h) => sum + h.totalExpense, 0),
+        totalProfit: Object.values(hostelTotals).reduce((sum, h) => sum + h.totalProfit, 0)
+      },
+      filters: {
+        year: targetYear,
+        hostelId: hostelId || null,
+        months: monthsCount
+      }
+    });
+  } catch (error: any) {
+    console.error('Get financial overview error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 export { 
   createHostelSchema, 
   createRoomSchema, 

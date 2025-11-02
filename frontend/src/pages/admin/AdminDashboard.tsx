@@ -182,6 +182,13 @@ const AdminDashboard: React.FC = () => {
       href: '/admin/expenses',
       color: 'bg-purple-500',
     },
+    {
+      title: 'Financial Overview',
+      description: 'View income, expenses, and profitability',
+      icon: TrendingUp,
+      href: '/admin/financial-overview',
+      color: 'bg-indigo-500',
+    },
   ];
 
   if (hostelsLoading) {
