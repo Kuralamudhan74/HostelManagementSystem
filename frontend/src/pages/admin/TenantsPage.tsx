@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, ArrowLeft, Search, MapPin, Phone, X, Eye, Upload, Trash2, Filter, Plus, DollarSign, Calendar, Download } from 'lucide-react';
+import { Users, ArrowLeft, Search, MapPin, Phone, X, Eye, Upload, Trash2, Filter, Plus, DollarSign, Calendar, Download, Edit } from 'lucide-react';
 import { formatCurrency } from '../../utils';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
@@ -41,6 +41,29 @@ const TenantsPage: React.FC = () => {
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [selectedTenantProfile, setSelectedTenantProfile] = useState<any>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [editProfileFormData, setEditProfileFormData] = useState<any>(null);
+  const [isAddTenantModalOpen, setIsAddTenantModalOpen] = useState(false);
+  const [addTenantFormData, setAddTenantFormData] = useState<any>({
+    firstName: '',
+    lastName: '',
+    phone: '',
+    tenantId: '',
+    fatherName: '',
+    dateOfBirth: '',
+    whatsappNumber: '',
+    permanentAddress: '',
+    city: '',
+    state: '',
+    aadharNumber: '',
+    occupation: '',
+    collegeCompanyName: '',
+    officeAddress: '',
+    expectedDurationStay: '',
+    emergencyContactName: '',
+    emergencyContactNumber: '',
+    emergencyContactRelation: '',
+  });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importResults, setImportResults] = useState<any>(null);
   const [showPastTenants, setShowPastTenants] = useState(false);
@@ -155,6 +178,113 @@ const TenantsPage: React.FC = () => {
       toast.error(error.response?.data?.message || 'Failed to delete tenant');
     },
   });
+
+  // Update tenant profile mutation
+  const updateTenantProfileMutation = useMutation({
+    mutationFn: ({ tenantId, data }: { tenantId: string; data: any }) =>
+      apiClient.updateTenantProfile(tenantId, data),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Tenant profile updated successfully');
+      setIsEditProfileModalOpen(false);
+      setEditProfileFormData(null);
+      // Refresh the profile if viewing
+      if (selectedTenantProfile) {
+        handleViewProfile(selectedTenantProfile._id || selectedTenantProfile.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update tenant profile');
+    },
+  });
+
+  // Create tenant mutation
+  const createTenantMutation = useMutation({
+    mutationFn: (data: any) => apiClient.createTenant(data),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Tenant created successfully');
+      setIsAddTenantModalOpen(false);
+      setAddTenantFormData({
+        firstName: '',
+        lastName: '',
+        phone: '',
+        tenantId: '',
+        fatherName: '',
+        dateOfBirth: '',
+        whatsappNumber: '',
+        permanentAddress: '',
+        city: '',
+        state: '',
+        aadharNumber: '',
+        occupation: '',
+        collegeCompanyName: '',
+        officeAddress: '',
+        expectedDurationStay: '',
+        emergencyContactName: '',
+        emergencyContactNumber: '',
+        emergencyContactRelation: '',
+      });
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to create tenant');
+    },
+  });
+
+  const handleAddTenantInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setAddTenantFormData((prev: any) => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleCreateTenant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    createTenantMutation.mutate(addTenantFormData);
+  };
+
+  const handleEditProfileClick = () => {
+    if (selectedTenantProfile) {
+      setEditProfileFormData({
+        firstName: selectedTenantProfile.firstName || '',
+        lastName: selectedTenantProfile.lastName || '',
+        phone: selectedTenantProfile.phone || '',
+        tenantId: selectedTenantProfile.tenantId || '',
+        fatherName: selectedTenantProfile.fatherName || '',
+        dateOfBirth: selectedTenantProfile.dateOfBirth || '',
+        whatsappNumber: selectedTenantProfile.whatsappNumber || '',
+        permanentAddress: selectedTenantProfile.permanentAddress || '',
+        city: selectedTenantProfile.city || '',
+        state: selectedTenantProfile.state || '',
+        aadharNumber: selectedTenantProfile.aadharNumber || '',
+        occupation: selectedTenantProfile.occupation || '',
+        collegeCompanyName: selectedTenantProfile.collegeCompanyName || '',
+        officeAddress: selectedTenantProfile.officeAddress || '',
+        expectedDurationStay: selectedTenantProfile.expectedDurationStay || '',
+        emergencyContactName: selectedTenantProfile.emergencyContactName || '',
+        emergencyContactNumber: selectedTenantProfile.emergencyContactNumber || '',
+        emergencyContactRelation: selectedTenantProfile.emergencyContactRelation || '',
+      });
+      setIsEditProfileModalOpen(true);
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenantProfile) return;
+
+    const tenantId = selectedTenantProfile._id || selectedTenantProfile.id;
+    updateTenantProfileMutation.mutate({ tenantId, data: editProfileFormData });
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setEditProfileFormData((prev: any) => ({
+      ...prev,
+      [name]: value
+    }));
+  };
 
   const handleToggleStatus = (tenant: any, currentStatus: boolean) => {
     updateTenantStatusMutation.mutate({
@@ -351,6 +481,13 @@ const TenantsPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-3">
               <Button
+                onClick={() => setIsAddTenantModalOpen(true)}
+                variant="primary"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Tenant
+              </Button>
+              <Button
                 onClick={() => {
                   // Export tenants to CSV based on current filters
                   const headers = ['Tenant Name', 'Tenant ID', 'Phone', 'Room Number', 'Hostel', 'Status', 'Monthly Share', 'Check-in Date', 'Rent Status'];
@@ -365,7 +502,7 @@ const TenantsPage: React.FC = () => {
                     const hostel = tenancy.roomId?.hostelId?.name || 'N/A';
                     const status = tenancy.isActive ? 'Active' : 'Inactive';
                     const monthlyShare = (tenancy.tenantShare || 0).toFixed(2);
-                    const checkInDate = tenancy.startDate ? new Date(tenancy.startDate).toLocaleDateString() : 'N/A';
+                    const checkInDate = tenancy.startDate ? formatDateForDisplay(new Date(tenancy.startDate)) : 'N/A';
                     
                     // Calculate rent status
                     const tenantIdForPayment = tenancy.tenantId?.id || tenancy.tenantId?._id || tenancy.tenantId;
@@ -566,7 +703,7 @@ const TenantsPage: React.FC = () => {
                   const period = calculateCurrentRentPeriodWithPayments(checkInDate, tenantPayments);
                   
                   // Check if tenant has paid for the CURRENT rent period
-                  const hasPayment = tenantPayments.some((payment: any) => {
+                  const currentPeriodPayment = tenantPayments.find((payment: any) => {
                     if (!payment.paymentPeriodStart || !payment.paymentPeriodEnd) return false;
                     
                     const payStart = new Date(payment.paymentPeriodStart);
@@ -581,7 +718,21 @@ const TenantsPage: React.FC = () => {
                     );
                   });
 
-                  paymentStatusInfo = getPaymentStatus(period.startDate, period.endDate, hasPayment);
+                  const hasPayment = !!currentPeriodPayment;
+                  const isPartialPayment = currentPeriodPayment?.paymentType === 'partial';
+                  const remainingAmount = currentPeriodPayment?.remainingAmount || 0;
+
+                  paymentStatusInfo = getPaymentStatus(period.startDate, period.endDate, hasPayment && !isPartialPayment);
+                  if (isPartialPayment && remainingAmount > 0) {
+                    paymentStatusInfo = {
+                      ...paymentStatusInfo,
+                      label: 'Pending',
+                      status: 'partial',
+                      colorClass: 'text-yellow-700',
+                      bgColorClass: 'bg-yellow-100',
+                      remainingAmount: remainingAmount,
+                    };
+                  }
                   rentPeriodInfo = period;
                 } catch (error) {
                   console.error('Error calculating rent period:', error);
@@ -668,13 +819,18 @@ const TenantsPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="mt-2 flex items-center gap-2">
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${paymentStatusInfo.bgColorClass} ${paymentStatusInfo.colorClass}`}>
                           {paymentStatusInfo.label}
                         </span>
-                        {paymentStatusInfo.status === 'due_soon' && paymentStatusInfo.label === 'Pending' && (
+                        {paymentStatusInfo.status === 'due_soon' && paymentStatusInfo.label === 'Pending' && !paymentStatusInfo.remainingAmount && (
                           <span className="text-xs text-gray-500 italic">
                             (No payment recorded for this period)
+                          </span>
+                        )}
+                        {paymentStatusInfo.remainingAmount && paymentStatusInfo.remainingAmount > 0 && (
+                          <span className="text-xs text-yellow-700 font-medium">
+                            Remaining: {formatCurrency(paymentStatusInfo.remainingAmount)}
                           </span>
                         )}
                       </div>
@@ -688,11 +844,11 @@ const TenantsPage: React.FC = () => {
                   </p>
                   <div className="text-xs text-gray-500 mb-3 space-y-1">
                     <p>
-                      Started: {new Date(tenancy.startDate).toLocaleDateString()}
+                      Started: {formatDateForDisplay(new Date(tenancy.startDate))}
                     </p>
                     {showPastTenants && tenancy.endDate && (
                       <p className="text-red-600">
-                        Ended: {new Date(tenancy.endDate).toLocaleDateString()}
+                        Ended: {formatDateForDisplay(new Date(tenancy.endDate))}
                       </p>
                     )}
                   </div>
@@ -1000,7 +1156,22 @@ const TenantsPage: React.FC = () => {
           setIsViewProfileModalOpen(false);
           setSelectedTenantProfile(null);
         }}
-        title="Tenant Profile"
+        title={
+          <div className="flex items-center justify-between w-full">
+            <span>Tenant Profile</span>
+            {selectedTenantProfile && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleEditProfileClick}
+                className="ml-4"
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Edit Profile
+              </Button>
+            )}
+          </div>
+        }
         size="xl"
       >
         {isLoadingProfile ? (
@@ -1379,6 +1550,562 @@ const TenantsPage: React.FC = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Edit Profile Modal */}
+      <Modal
+        isOpen={isEditProfileModalOpen}
+        onClose={() => {
+          setIsEditProfileModalOpen(false);
+          setEditProfileFormData(null);
+        }}
+        title="Edit Tenant Profile"
+        size="xl"
+      >
+        {editProfileFormData ? (
+          <form onSubmit={handleUpdateProfile} className="space-y-6 py-2">
+            {/* Personal Information */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+                  <input
+                    type="text"
+                    name="firstName"
+                    value={editProfileFormData.firstName}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                  <input
+                    type="text"
+                    name="lastName"
+                    value={editProfileFormData.lastName}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tenant ID</label>
+                  <input
+                    type="text"
+                    name="tenantId"
+                    value={editProfileFormData.tenantId}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={editProfileFormData.phone}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Father Name</label>
+                  <input
+                    type="text"
+                    name="fatherName"
+                    value={editProfileFormData.fatherName}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    name="dateOfBirth"
+                    value={editProfileFormData.dateOfBirth}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp Number</label>
+                  <input
+                    type="tel"
+                    name="whatsappNumber"
+                    value={editProfileFormData.whatsappNumber}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Address Information */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Address Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Permanent Address</label>
+                  <textarea
+                    name="permanentAddress"
+                    value={editProfileFormData.permanentAddress}
+                    onChange={handleInputChange}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={editProfileFormData.city}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                  <input
+                    type="text"
+                    name="state"
+                    value={editProfileFormData.state}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Identity & Occupation */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Identity & Occupation</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Aadhar Number</label>
+                  <input
+                    type="text"
+                    name="aadharNumber"
+                    value={editProfileFormData.aadharNumber}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Occupation</label>
+                  <input
+                    type="text"
+                    name="occupation"
+                    value={editProfileFormData.occupation}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">College/Company/Institute Name</label>
+                  <input
+                    type="text"
+                    name="collegeCompanyName"
+                    value={editProfileFormData.collegeCompanyName}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Office/College/Institute Address</label>
+                  <textarea
+                    name="officeAddress"
+                    value={editProfileFormData.officeAddress}
+                    onChange={handleInputChange}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expected Duration of Stay</label>
+                  <input
+                    type="text"
+                    name="expectedDurationStay"
+                    value={editProfileFormData.expectedDurationStay}
+                    onChange={handleInputChange}
+                    placeholder="e.g., 3 years, 2 years"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Contact */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Emergency Contact</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Name</label>
+                  <input
+                    type="text"
+                    name="emergencyContactName"
+                    value={editProfileFormData.emergencyContactName}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Relation</label>
+                  <input
+                    type="text"
+                    name="emergencyContactRelation"
+                    value={editProfileFormData.emergencyContactRelation}
+                    onChange={handleInputChange}
+                    placeholder="e.g., Father, Mother, Brother"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Number</label>
+                  <input
+                    type="tel"
+                    name="emergencyContactNumber"
+                    value={editProfileFormData.emergencyContactNumber}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setIsEditProfileModalOpen(false);
+                  setEditProfileFormData(null);
+                }}
+                disabled={updateTenantProfileMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={updateTenantProfileMutation.isPending}
+              >
+                {updateTenantProfileMutation.isPending ? (
+                  <>
+                    <LoadingSpinner size="sm" />
+                    <span className="ml-2">Updating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Update Profile
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <LoadingSpinner />
+        )}
+          </Modal>
+
+      {/* Add Tenant Modal */}
+      <Modal
+        isOpen={isAddTenantModalOpen}
+        onClose={() => {
+          setIsAddTenantModalOpen(false);
+          setAddTenantFormData({
+            firstName: '',
+            lastName: '',
+            phone: '',
+            tenantId: '',
+            fatherName: '',
+            dateOfBirth: '',
+            whatsappNumber: '',
+            permanentAddress: '',
+            city: '',
+            state: '',
+            aadharNumber: '',
+            occupation: '',
+            collegeCompanyName: '',
+            officeAddress: '',
+            expectedDurationStay: '',
+            emergencyContactName: '',
+            emergencyContactNumber: '',
+            emergencyContactRelation: '',
+          });
+        }}
+        title="Add New Tenant"
+        size="xl"
+      >
+        <form onSubmit={handleCreateTenant} className="space-y-6 py-2">
+          {/* Personal Information */}
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+                <input
+                  type="text"
+                  name="firstName"
+                  value={addTenantFormData.firstName}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={addTenantFormData.lastName}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tenant ID</label>
+                <input
+                  type="text"
+                  name="tenantId"
+                  value={addTenantFormData.tenantId}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  placeholder="Auto-generated if left empty"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={addTenantFormData.phone}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Father Name</label>
+                <input
+                  type="text"
+                  name="fatherName"
+                  value={addTenantFormData.fatherName}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                <input
+                  type="date"
+                  name="dateOfBirth"
+                  value={addTenantFormData.dateOfBirth}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp Number</label>
+                <input
+                  type="tel"
+                  name="whatsappNumber"
+                  value={addTenantFormData.whatsappNumber}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Address Information */}
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Address Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Permanent Address</label>
+                <textarea
+                  name="permanentAddress"
+                  value={addTenantFormData.permanentAddress}
+                  onChange={handleAddTenantInputChange}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                <input
+                  type="text"
+                  name="city"
+                  value={addTenantFormData.city}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                <input
+                  type="text"
+                  name="state"
+                  value={addTenantFormData.state}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Identity & Occupation */}
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Identity & Occupation</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Aadhar Number</label>
+                <input
+                  type="text"
+                  name="aadharNumber"
+                  value={addTenantFormData.aadharNumber}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Occupation</label>
+                <input
+                  type="text"
+                  name="occupation"
+                  value={addTenantFormData.occupation}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">College/Company/Institute Name</label>
+                <input
+                  type="text"
+                  name="collegeCompanyName"
+                  value={addTenantFormData.collegeCompanyName}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Office/College/Institute Address</label>
+                <textarea
+                  name="officeAddress"
+                  value={addTenantFormData.officeAddress}
+                  onChange={handleAddTenantInputChange}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Expected Duration of Stay</label>
+                <input
+                  type="text"
+                  name="expectedDurationStay"
+                  value={addTenantFormData.expectedDurationStay}
+                  onChange={handleAddTenantInputChange}
+                  placeholder="e.g., 3 years, 2 years"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Emergency Contact */}
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Emergency Contact</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Name</label>
+                <input
+                  type="text"
+                  name="emergencyContactName"
+                  value={addTenantFormData.emergencyContactName}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Relation</label>
+                <input
+                  type="text"
+                  name="emergencyContactRelation"
+                  value={addTenantFormData.emergencyContactRelation}
+                  onChange={handleAddTenantInputChange}
+                  placeholder="e.g., Father, Mother, Brother"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Number</label>
+                <input
+                  type="tel"
+                  name="emergencyContactNumber"
+                  value={addTenantFormData.emergencyContactNumber}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsAddTenantModalOpen(false);
+                setAddTenantFormData({
+                  firstName: '',
+                  lastName: '',
+                  phone: '',
+                  tenantId: '',
+                  fatherName: '',
+                  dateOfBirth: '',
+                  whatsappNumber: '',
+                  permanentAddress: '',
+                  city: '',
+                  state: '',
+                  aadharNumber: '',
+                  occupation: '',
+                  collegeCompanyName: '',
+                  officeAddress: '',
+                  expectedDurationStay: '',
+                  emergencyContactName: '',
+                  emergencyContactNumber: '',
+                  emergencyContactRelation: '',
+                });
+              }}
+              disabled={createTenantMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={createTenantMutation.isPending}
+            >
+              {createTenantMutation.isPending ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  <span className="ml-2">Creating...</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Tenant
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

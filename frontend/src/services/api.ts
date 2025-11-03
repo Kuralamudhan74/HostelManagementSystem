@@ -163,8 +163,18 @@ class ApiClient {
     return response.data;
   }
 
+  async createTenant(data: any): Promise<{ user: any; message: string }> {
+    const response = await this.client.post('/admin/tenants', data);
+    return response.data;
+  }
+
   async getTenantProfile(tenantId: string): Promise<{ user: any }> {
     const response = await this.client.get(`/admin/tenants/${tenantId}/profile`);
+    return response.data;
+  }
+
+  async updateTenantProfile(tenantId: string, data: any): Promise<{ user: any; message: string }> {
+    const response = await this.client.patch(`/admin/tenants/${tenantId}/profile`, data);
     return response.data;
   }
 

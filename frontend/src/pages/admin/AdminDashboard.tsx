@@ -19,7 +19,7 @@ import Button from '../../components/Button';
 import Modal from '../../components/Modal';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { formatCurrency } from '../../utils';
+import { formatCurrency, formatDate } from '../../utils';
 
 const AdminDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -316,7 +316,7 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                   <span className="text-xs text-gray-500">
-                    {new Date(tenancy.createdAt).toLocaleDateString()}
+                    {formatDate(new Date(tenancy.createdAt))}
                   </span>
                 </div>
               ))}

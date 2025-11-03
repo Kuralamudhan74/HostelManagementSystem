@@ -43,7 +43,7 @@ export const calculateOutstandingBalance = async (tenantId: string): Promise<num
 };
 
 // Record payment with allocations
-export const recordPaymentWithAllocations = async (data: PaymentRecordData) => {
+export const recordPaymentWithAllocations = async (data: PaymentRecordData & { paymentType?: 'full' | 'partial'; remainingAmount?: number }) => {
   try {
     // Create payment record
     const payment = new Payment({
@@ -53,7 +53,9 @@ export const recordPaymentWithAllocations = async (data: PaymentRecordData) => {
       paymentDate: data.paymentDate,
       paymentPeriodStart: data.paymentPeriodStart,
       paymentPeriodEnd: data.paymentPeriodEnd,
-      description: data.description
+      description: data.description,
+      paymentType: data.paymentType || 'full',
+      remainingAmount: data.remainingAmount || 0
     });
 
     await payment.save();

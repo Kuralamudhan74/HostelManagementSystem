@@ -10,6 +10,7 @@ import apiClient from '../../services/api';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { formatCurrency } from '../../utils';
+import { formatDateForDisplay } from '../../utils/rentPeriodUtils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
@@ -163,7 +164,7 @@ const PaymentsPage: React.FC = () => {
                   // Export expenses to CSV
                   const headers = ['Date', 'Hostel', 'Category', 'Description', 'Amount'];
                   const rows = expenses.map((expense: any) => [
-                    new Date(expense.expenseDate).toLocaleDateString(),
+                    formatDateForDisplay(new Date(expense.expenseDate)),
                     expense.hostelId?.name || 'N/A',
                     expense.categoryId?.name || 'N/A',
                     expense.description,
@@ -319,7 +320,7 @@ const PaymentsPage: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center text-sm text-gray-500">
                             <Calendar className="w-4 h-4 mr-2" />
-                            {new Date(expense.expenseDate).toLocaleDateString()}
+                            {formatDateForDisplay(new Date(expense.expenseDate))}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">

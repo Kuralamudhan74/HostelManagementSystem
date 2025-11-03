@@ -238,6 +238,8 @@ export interface IPayment extends Document {
   paymentPeriodStart?: Date; // Rent period start date
   paymentPeriodEnd?: Date; // Rent period end date
   description?: string;
+  paymentType?: 'full' | 'partial';
+  remainingAmount?: number;
   receiptAttachmentId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -251,6 +253,8 @@ const paymentSchema = new Schema<IPayment>({
   paymentPeriodStart: { type: Date }, // Optional: rent period start
   paymentPeriodEnd: { type: Date }, // Optional: rent period end
   description: { type: String },
+  paymentType: { type: String, enum: ['full', 'partial'], default: 'full' },
+  remainingAmount: { type: Number, default: 0 },
   receiptAttachmentId: { type: Schema.Types.ObjectId, ref: 'Attachment' }
 }, {
   timestamps: true

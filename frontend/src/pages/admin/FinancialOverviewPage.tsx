@@ -72,7 +72,7 @@ const FinancialOverviewPage: React.FC = () => {
         const date = new Date(item.month + '-01');
         monthlyMap[item.month] = {
           month: item.month,
-          monthLabel: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          monthLabel: date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
           income: 0,
           expense: 0,
           profit: 0,

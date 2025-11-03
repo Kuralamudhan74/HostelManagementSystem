@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { z } from 'zod';
+import { hashPassword } from '../middleware/auth';
 import { 
   Hostel, 
   Room, 
@@ -517,6 +518,8 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
       paymentPeriodStart,
       paymentPeriodEnd,
       description, 
+      paymentType = 'full',
+      remainingAmount = 0,
       allocations = [] 
     } = req.body;
 
@@ -580,6 +583,8 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
       paymentPeriodStart: paymentPeriodStart ? new Date(paymentPeriodStart) : undefined,
       paymentPeriodEnd: paymentPeriodEnd ? new Date(paymentPeriodEnd) : undefined,
       description,
+      paymentType: paymentType || 'full',
+      remainingAmount: paymentType === 'partial' ? (remainingAmount || 0) : 0,
       allocations: finalAllocations
     });
 
@@ -824,6 +829,195 @@ export const getTenantProfile = async (req: AuthRequest, res: Response): Promise
     });
   } catch (error: any) {
     console.error('Get tenant profile error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Update tenant profile (admin only)
+export const updateTenantProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenantId } = req.params;
+    const updateData = {
+      firstName: req.body.firstName,
+      lastName: req.body.lastName,
+      phone: req.body.phone,
+      fatherName: req.body.fatherName,
+      dateOfBirth: req.body.dateOfBirth,
+      whatsappNumber: req.body.whatsappNumber,
+      permanentAddress: req.body.permanentAddress,
+      city: req.body.city,
+      state: req.body.state,
+      aadharNumber: req.body.aadharNumber,
+      occupation: req.body.occupation,
+      collegeCompanyName: req.body.collegeCompanyName,
+      officeAddress: req.body.officeAddress,
+      expectedDurationStay: req.body.expectedDurationStay,
+      emergencyContactName: req.body.emergencyContactName,
+      emergencyContactNumber: req.body.emergencyContactNumber,
+      emergencyContactRelation: req.body.emergencyContactRelation,
+      tenantId: req.body.tenantId, // Allow updating tenant ID
+    };
+
+    const user = await User.findById(tenantId);
+    
+    if (!user) {
+      res.status(404).json({ message: 'Tenant not found' });
+      return;
+    }
+
+    if (user.role !== 'tenant') {
+      res.status(400).json({ message: 'Can only update tenant profiles' });
+      return;
+    }
+
+    // Store old data for audit log
+    const oldData = {
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      // ... other fields
+    };
+
+    // Update user
+    const updatedUser = await User.findByIdAndUpdate(
+      tenantId,
+      updateData,
+      { new: true }
+    ).select('-password');
+
+    // Log profile update
+    await logAction(req.user!, 'User', tenantId, 'update', oldData, updateData);
+
+    res.json({
+      message: 'Tenant profile updated successfully',
+      user: updatedUser
+    });
+  } catch (error: any) {
+    console.error('Update tenant profile error:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Create tenant (admin only)
+export const createTenant = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const {
+      firstName,
+      lastName,
+      phone,
+      tenantId: providedTenantId,
+      fatherName,
+      dateOfBirth,
+      whatsappNumber,
+      permanentAddress,
+      city,
+      state,
+      aadharNumber,
+      occupation,
+      collegeCompanyName,
+      officeAddress,
+      expectedDurationStay,
+      emergencyContactName,
+      emergencyContactNumber,
+      emergencyContactRelation,
+    } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !phone) {
+      res.status(400).json({ message: 'First name, last name, and phone are required' });
+      return;
+    }
+
+    // Check for duplicate phone or Aadhar
+    if (phone) {
+      const existingUserByPhone = await User.findOne({ phone });
+      if (existingUserByPhone) {
+        res.status(400).json({ message: 'User with this phone number already exists' });
+        return;
+      }
+    }
+
+    if (aadharNumber) {
+      const existingUserByAadhar = await User.findOne({ aadharNumber });
+      if (existingUserByAadhar) {
+        res.status(400).json({ message: 'User with this Aadhar number already exists' });
+        return;
+      }
+    }
+
+    // Generate tenant ID if not provided
+    let tenantId = providedTenantId;
+    if (!tenantId) {
+      // Find all tenants with numeric tenantIds
+      const allTenants = await User.find({ 
+        role: 'tenant',
+        tenantId: { $exists: true, $ne: null }
+      }).select('tenantId');
+
+      let maxId = 0;
+      for (const tenant of allTenants) {
+        if (tenant.tenantId) {
+          const id = parseInt(tenant.tenantId, 10);
+          if (!isNaN(id) && id > maxId) {
+            maxId = id;
+          }
+        }
+      }
+      tenantId = (maxId + 1).toString();
+    }
+
+    // Generate placeholder email and password (tenants don't log in)
+    const email = `tenant${tenantId}@hostel.local`;
+    const placeholderPassword = `placeholder_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    const hashedPassword = await hashPassword(placeholderPassword);
+
+    // Create user
+    const newUser = new User({
+      email,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      phone,
+      tenantId,
+      fatherName,
+      dateOfBirth,
+      whatsappNumber,
+      permanentAddress,
+      city,
+      state,
+      aadharNumber,
+      occupation,
+      collegeCompanyName,
+      officeAddress,
+      expectedDurationStay,
+      emergencyContactName,
+      emergencyContactNumber,
+      emergencyContactRelation: emergencyContactRelation || (emergencyContactName ? 'Family' : undefined),
+      role: 'tenant',
+      isActive: true,
+    });
+
+    await newUser.save();
+
+    // Log action
+    await logAction(req.user!, 'User', newUser._id, 'create', null, {
+      tenantId: newUser.tenantId,
+      role: 'tenant',
+      source: 'Manual Creation'
+    });
+
+    res.status(201).json({
+      message: 'Tenant created successfully',
+      user: newUser
+    });
+  } catch (error: any) {
+    console.error('Create tenant error:', error);
     res.status(500).json({ 
       message: error.message || 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined

@@ -31,6 +31,8 @@ const paymentSchema = z.object({
   paymentPeriodStart: z.string().optional(),
   paymentPeriodEnd: z.string().optional(),
   description: z.string().optional(),
+  paymentType: z.enum(['full', 'partial']),
+  remainingAmount: z.number().min(0).optional(),
 }).refine((data) => {
   // Validate that period start is before period end if both are provided
   if (data.paymentPeriodStart && data.paymentPeriodEnd) {
@@ -42,6 +44,15 @@ const paymentSchema = z.object({
 }, {
   message: 'Period Start must be before Period End',
   path: ['paymentPeriodEnd'],
+}).refine((data) => {
+  // If partial payment, remaining amount is required
+  if (data.paymentType === 'partial') {
+    return data.remainingAmount !== undefined && data.remainingAmount >= 0;
+  }
+  return true;
+}, {
+  message: 'Remaining amount is required for partial payments',
+  path: ['remainingAmount'],
 });
 
 const PaymentsPage: React.FC = () => {
@@ -70,8 +81,13 @@ const PaymentsPage: React.FC = () => {
       paymentDate: new Date().toISOString().split('T')[0],
       paymentPeriodStart: '',
       paymentPeriodEnd: '',
+      paymentType: 'full' as 'full' | 'partial',
+      remainingAmount: 0,
     }
   });
+
+  const paymentType = watch('paymentType');
+  const paymentAmount = watch('amount');
 
   const selectedTenantId = watch('tenantId');
   const periodStart = watch('paymentPeriodStart');
@@ -225,6 +241,8 @@ const PaymentsPage: React.FC = () => {
         paymentPeriodStart: data.paymentPeriodStart ? new Date(data.paymentPeriodStart).toISOString() : undefined,
         paymentPeriodEnd: data.paymentPeriodEnd ? new Date(data.paymentPeriodEnd).toISOString() : undefined,
         description: data.description || '',
+        paymentType: data.paymentType || 'full',
+        remainingAmount: data.paymentType === 'partial' ? Number(data.remainingAmount || 0) : 0,
         allocations: [], // Start with empty allocations
       };
 
@@ -434,14 +452,14 @@ const PaymentsPage: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center text-sm text-gray-500">
                             <Calendar className="w-4 h-4 mr-2" />
-                            {new Date(payment.paymentDate).toLocaleDateString()}
+                            {formatDateForDisplay(new Date(payment.paymentDate))}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm text-gray-500">
                             {payment.paymentPeriodStart && payment.paymentPeriodEnd ? (
                               <>
-                                {new Date(payment.paymentPeriodStart).toLocaleDateString()} - {new Date(payment.paymentPeriodEnd).toLocaleDateString()}
+                                {formatDateForDisplay(new Date(payment.paymentPeriodStart))} - {formatDateForDisplay(new Date(payment.paymentPeriodEnd))}
                               </>
                             ) : (
                               'N/A'
@@ -508,6 +526,62 @@ const PaymentsPage: React.FC = () => {
               <p className="text-red-500 text-xs mt-1">{errors.amount.message as string}</p>
             )}
           </div>
+
+          {/* Payment Type Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Payment Type *
+            </label>
+            <div className="flex gap-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="full"
+                  {...register('paymentType')}
+                  onChange={(e) => {
+                    register('paymentType').onChange(e);
+                    setValue('remainingAmount', 0);
+                  }}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">Fully Paid</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="partial"
+                  {...register('paymentType')}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">Partially Paid</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Remaining Payment Field - Only show for partial payments */}
+          {paymentType === 'partial' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Remaining Payment (₹) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                {...register('remainingAmount', { valueAsNumber: true })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                placeholder="0.00"
+                min="0"
+              />
+              {errors.remainingAmount && (
+                <p className="text-red-500 text-xs mt-1">{errors.remainingAmount.message as string}</p>
+              )}
+              {paymentAmount && paymentType === 'partial' && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Total Due: {formatCurrency(paymentAmount + (watch('remainingAmount') || 0))}
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

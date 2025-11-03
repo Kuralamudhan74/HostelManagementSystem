@@ -142,9 +142,10 @@ const mapRowToUser = (row: ImportRow): any => {
         }
       } else if (mappedField === 'fullName') {
         // Split full name into first and last name
-        const nameParts = cleanedValue.split(' ');
+        const nameParts = cleanedValue.split(' ').filter(part => part.trim() !== '');
         userData.firstName = nameParts[0] || '';
-        userData.lastName = nameParts.slice(1).join(' ') || nameParts[0] || '';
+        // Only set lastName if there are multiple parts, otherwise leave it empty
+        userData.lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
       } else if (mappedField === 'cityState') {
         // Split "City & State" or "City TN" into city and state
         const parts = cleanedValue.split(/\s+/);
