@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Save, Receipt } from 'lucide-react';
+import { ArrowLeft, Save, Receipt, Lock, Key } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import Button from '../components/Button';
@@ -7,6 +7,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import apiClient from '../services/api';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '../utils';
+import Modal from '../components/Modal';
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -32,6 +33,15 @@ const ProfilePage: React.FC = () => {
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    secretCode: '',
+    newPassword: '',
+    confirmPassword: '',
+    useSecretCode: false,
+  });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Fetch user profile
   const { isLoading } = useQuery({
@@ -82,6 +92,62 @@ const ProfilePage: React.FC = () => {
       toast.error(error.response?.data?.message || 'Failed to update profile');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validation
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("Passwords don't match");
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    if (!passwordForm.useSecretCode && !passwordForm.currentPassword) {
+      toast.error('Please enter your current password');
+      return;
+    }
+
+    if (passwordForm.useSecretCode && !passwordForm.secretCode) {
+      toast.error('Please enter the secret code');
+      return;
+    }
+
+    setIsChangingPassword(true);
+
+    try {
+      const data: any = {
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword,
+      };
+
+      if (passwordForm.useSecretCode) {
+        data.secretCode = passwordForm.secretCode;
+      } else {
+        data.currentPassword = passwordForm.currentPassword;
+      }
+
+      await apiClient.changePassword(data);
+      toast.success('Password changed successfully');
+      setIsPasswordModalOpen(false);
+      setPasswordForm({
+        currentPassword: '',
+        secretCode: '',
+        newPassword: '',
+        confirmPassword: '',
+        useSecretCode: false,
+      });
+    } catch (error: any) {
+      console.error('Change password error:', error);
+      toast.error(error.response?.data?.message || 'Failed to change password');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -371,6 +437,24 @@ const ProfilePage: React.FC = () => {
             </div>
           </div>
 
+          {/* Password Change Section */}
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Password & Security</h2>
+                <p className="text-sm text-gray-600 mt-1">Update your password to keep your account secure</p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setIsPasswordModalOpen(true)}
+              >
+                <Lock className="w-4 h-4 mr-2" />
+                Change Password
+              </Button>
+            </div>
+          </div>
+
           {/* Submit Button */}
           <div className="flex justify-end gap-3">
             <Button
@@ -399,6 +483,133 @@ const ProfilePage: React.FC = () => {
             </Button>
           </div>
         </form>
+
+        {/* Password Change Modal */}
+        <Modal
+          isOpen={isPasswordModalOpen}
+          onClose={() => setIsPasswordModalOpen(false)}
+          title="Change Password"
+        >
+          <form onSubmit={handlePasswordChange}>
+            <div className="space-y-4">
+              {/* Toggle between current password and secret code */}
+              <div className="flex items-center gap-4 mb-4">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={!passwordForm.useSecretCode}
+                    onChange={() => setPasswordForm({ ...passwordForm, useSecretCode: false, secretCode: '' })}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700">Use Current Password</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={passwordForm.useSecretCode}
+                    onChange={() => setPasswordForm({ ...passwordForm, useSecretCode: true, currentPassword: '' })}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700">Use Secret Code</span>
+                </label>
+              </div>
+
+              {/* Current Password OR Secret Code */}
+              {!passwordForm.useSecretCode ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Current Password *
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordForm.currentPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                    required={!passwordForm.useSecretCode}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Secret Code *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Key className="w-4 h-4 text-gray-400" />
+                    <input
+                      type="password"
+                      value={passwordForm.secretCode}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, secretCode: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter the secret code"
+                      required={passwordForm.useSecretCode}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Contact admin if you forgot your password</p>
+                </div>
+              )}
+
+              {/* New Password */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  New Password *
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  minLength={6}
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">At least 6 characters</p>
+              </div>
+
+              {/* Confirm Password */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Confirm New Password *
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  minLength={6}
+                  required
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex justify-end gap-3 mt-6">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setIsPasswordModalOpen(false)}
+                  disabled={isChangingPassword}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={isChangingPassword}
+                >
+                  {isChangingPassword ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Changing...
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4 mr-2" />
+                      Change Password
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </form>
+        </Modal>
       </div>
     </div>
   );

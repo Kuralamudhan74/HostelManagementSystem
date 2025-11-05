@@ -179,6 +179,20 @@ const TenantsPage: React.FC = () => {
     },
   });
 
+  const permanentDeleteTenantMutation = useMutation({
+    mutationFn: (tenantId: string) => apiClient.permanentlyDeleteTenant(tenantId),
+    onSuccess: (data) => {
+      toast.success(data.message);
+      setIsDeleteModalOpen(false);
+      setSelectedTenant(null);
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to permanently delete tenant');
+    },
+  });
+
   // Update tenant profile mutation
   const updateTenantProfileMutation = useMutation({
     mutationFn: ({ tenantId, data }: { tenantId: string; data: any }) =>
@@ -489,28 +503,31 @@ const TenantsPage: React.FC = () => {
               </Button>
               <Button
                 onClick={() => {
-                  // Export tenants to CSV based on current filters
-                  const headers = ['Tenant Name', 'Tenant ID', 'Phone', 'Room Number', 'Hostel', 'Status', 'Monthly Share', 'Check-in Date', 'Rent Status'];
+                  // Export tenants to CSV based on current filters - FULL PROFILE DATA
+                  const headers = [
+                    'First Name', 'Last Name', 'Tenant ID', 'Email',
+                    'Mobile Number', 'WhatsApp Number',
+                    'Father Name', 'Date of Birth',
+                    'Permanent Address', 'City', 'State',
+                    'Aadhar Number', 'Occupation',
+                    'College/Company/Institute', 'Office Address',
+                    'Expected Duration of Stay',
+                    'Emergency Contact Name', 'Emergency Contact Relation', 'Emergency Contact Number',
+                    'Room Number', 'Hostel', 'Tenancy Status', 'Monthly Share', 'Check-in Date', 'Rent Payment Status'
+                  ];
                   const rows: any[] = [];
 
-                  // Add assigned tenants
+                  // Add assigned tenants with full profile data
                   filteredTenancies.forEach((tenancy: any) => {
-                    const tenantName = `${tenancy.tenantId?.firstName || ''} ${tenancy.tenantId?.lastName || ''}`;
-                    const tenantId = tenancy.tenantId?.tenantId || 'N/A';
-                    const phone = tenancy.tenantId?.phone || 'N/A';
-                    const roomNumber = tenancy.roomId?.roomNumber || 'N/A';
-                    const hostel = tenancy.roomId?.hostelId?.name || 'N/A';
-                    const status = tenancy.isActive ? 'Active' : 'Inactive';
-                    const monthlyShare = (tenancy.tenantShare || 0).toFixed(2);
-                    const checkInDate = tenancy.startDate ? formatDateForDisplay(new Date(tenancy.startDate)) : 'N/A';
-                    
+                    const tenant = tenancy.tenantId;
+
                     // Calculate rent status
-                    const tenantIdForPayment = tenancy.tenantId?.id || tenancy.tenantId?._id || tenancy.tenantId;
+                    const tenantIdForPayment = tenant?.id || tenant?._id || tenant;
                     const tenantPayments = (paymentsData?.payments || []).filter((payment: any) => {
                       const paymentTenantId = payment.tenantId?.id || payment.tenantId?._id || payment.tenantId;
                       return paymentTenantId === tenantIdForPayment;
                     });
-                    
+
                     let rentStatus = 'N/A';
                     if (!showPastTenants && tenancy.isActive && tenancy.startDate) {
                       try {
@@ -531,29 +548,58 @@ const TenantsPage: React.FC = () => {
                         rentStatus = 'Unknown';
                       }
                     }
-                    
+
                     rows.push([
-                      tenantName,
-                      tenantId,
-                      phone,
-                      roomNumber,
-                      hostel,
-                      status,
-                      monthlyShare,
-                      checkInDate,
+                      tenant?.firstName || '',
+                      tenant?.lastName || '',
+                      tenant?.tenantId || 'N/A',
+                      tenant?.email || 'N/A',
+                      tenant?.phone || 'N/A',
+                      tenant?.whatsappNumber || 'N/A',
+                      tenant?.fatherName || 'N/A',
+                      tenant?.dateOfBirth || 'N/A',
+                      tenant?.permanentAddress || 'N/A',
+                      tenant?.city || 'N/A',
+                      tenant?.state || 'N/A',
+                      tenant?.aadharNumber || 'N/A',
+                      tenant?.occupation || 'N/A',
+                      tenant?.collegeCompanyName || 'N/A',
+                      tenant?.officeAddress || 'N/A',
+                      tenant?.expectedDurationStay || 'N/A',
+                      tenant?.emergencyContactName || 'N/A',
+                      tenant?.emergencyContactRelation || 'N/A',
+                      tenant?.emergencyContactNumber || 'N/A',
+                      tenancy.roomId?.roomNumber || 'N/A',
+                      tenancy.roomId?.hostelId?.name || 'N/A',
+                      tenancy.isActive ? 'Active' : 'Inactive',
+                      (tenancy.tenantShare || 0).toFixed(2),
+                      tenancy.startDate ? formatDateForDisplay(new Date(tenancy.startDate)) : 'N/A',
                       rentStatus
                     ]);
                   });
 
-                  // Add unassigned tenants
+                  // Add unassigned tenants with full profile data
                   filteredUnassignedTenants.forEach((tenant: any) => {
-                    const tenantName = `${tenant.firstName || ''} ${tenant.lastName || ''}`;
-                    const tenantId = tenant.tenantId || 'N/A';
-                    const phone = tenant.phone || 'N/A';
                     rows.push([
-                      tenantName,
-                      tenantId,
-                      phone,
+                      tenant?.firstName || '',
+                      tenant?.lastName || '',
+                      tenant?.tenantId || 'N/A',
+                      tenant?.email || 'N/A',
+                      tenant?.phone || 'N/A',
+                      tenant?.whatsappNumber || 'N/A',
+                      tenant?.fatherName || 'N/A',
+                      tenant?.dateOfBirth || 'N/A',
+                      tenant?.permanentAddress || 'N/A',
+                      tenant?.city || 'N/A',
+                      tenant?.state || 'N/A',
+                      tenant?.aadharNumber || 'N/A',
+                      tenant?.occupation || 'N/A',
+                      tenant?.collegeCompanyName || 'N/A',
+                      tenant?.officeAddress || 'N/A',
+                      tenant?.expectedDurationStay || 'N/A',
+                      tenant?.emergencyContactName || 'N/A',
+                      tenant?.emergencyContactRelation || 'N/A',
+                      tenant?.emergencyContactNumber || 'N/A',
                       'Not Assigned',
                       'N/A',
                       tenant.isActive ? 'Active' : 'Inactive',
@@ -565,17 +611,17 @@ const TenantsPage: React.FC = () => {
 
                   const csvContent = [
                     headers.join(','),
-                    ...rows.map((row) => row.map((cell) => `"${String(cell)}"`).join(',')),
+                    ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
                   ].join('\n');
 
                   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                   const url = window.URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  a.download = `tenants-export-${new Date().getTime()}.csv`;
+                  a.download = `tenants-full-export-${new Date().getTime()}.csv`;
                   a.click();
                   window.URL.revokeObjectURL(url);
-                  toast.success(`Exported ${rows.length} tenant(s) successfully`);
+                  toast.success(`Exported ${rows.length} tenant(s) with full profile data`);
                 }}
                 variant="secondary"
               >
@@ -703,12 +749,13 @@ const TenantsPage: React.FC = () => {
                   const period = calculateCurrentRentPeriodWithPayments(checkInDate, tenantPayments);
                   
                   // Check if tenant has paid for the CURRENT rent period
-                  const currentPeriodPayment = tenantPayments.find((payment: any) => {
+                  // Get ALL payments for this period (in case of multiple partial payments)
+                  const currentPeriodPayments = tenantPayments.filter((payment: any) => {
                     if (!payment.paymentPeriodStart || !payment.paymentPeriodEnd) return false;
-                    
+
                     const payStart = new Date(payment.paymentPeriodStart);
                     const payEnd = new Date(payment.paymentPeriodEnd);
-                    
+
                     // Check if payment period overlaps with current rent period
                     return isPaymentPeriodValid(
                       payStart,
@@ -718,19 +765,39 @@ const TenantsPage: React.FC = () => {
                     );
                   });
 
-                  const hasPayment = !!currentPeriodPayment;
-                  const isPartialPayment = currentPeriodPayment?.paymentType === 'partial';
-                  const remainingAmount = currentPeriodPayment?.remainingAmount || 0;
+                  const hasPayment = currentPeriodPayments.length > 0;
 
-                  paymentStatusInfo = getPaymentStatus(period.startDate, period.endDate, hasPayment && !isPartialPayment);
-                  if (isPartialPayment && remainingAmount > 0) {
+                  // Calculate total amount paid and remaining for this period
+                  let totalPaidAmount = 0;
+                  let totalRemainingAmount = 0;
+                  let hasAnyPartialPayment = false;
+
+                  currentPeriodPayments.forEach((payment: any) => {
+                    totalPaidAmount += payment.amount || 0;
+                    if (payment.paymentType === 'partial') {
+                      hasAnyPartialPayment = true;
+                      totalRemainingAmount = payment.remainingAmount || 0; // Use the latest remaining amount
+                    }
+                  });
+
+                  // Check if fully paid: if last payment is 'full' type OR remaining amount is 0
+                  const latestPayment = currentPeriodPayments[currentPeriodPayments.length - 1];
+                  const isFullyPaid = hasPayment && (
+                    latestPayment?.paymentType === 'full' ||
+                    (hasAnyPartialPayment && totalRemainingAmount === 0)
+                  );
+
+                  paymentStatusInfo = getPaymentStatus(period.startDate, period.endDate, isFullyPaid);
+
+                  // Show partial status if there's still remaining amount
+                  if (hasPayment && !isFullyPaid && totalRemainingAmount > 0) {
                     paymentStatusInfo = {
                       ...paymentStatusInfo,
-                      label: 'Pending',
+                      label: 'Partial',
                       status: 'partial',
                       colorClass: 'text-yellow-700',
                       bgColorClass: 'bg-yellow-100',
-                      remainingAmount: remainingAmount,
+                      remainingAmount: totalRemainingAmount,
                     };
                   }
                   rentPeriodInfo = period;
@@ -901,20 +968,18 @@ const TenantsPage: React.FC = () => {
                         Unassign
                       </Button>
                     )}
-                    {!showPastTenants && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="flex-1 min-w-[120px] bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
-                        onClick={() => {
-                          setSelectedTenant(tenancy.tenantId);
-                          setIsDeleteModalOpen(true);
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete
-                      </Button>
-                    )}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="flex-1 min-w-[120px] bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                      onClick={() => {
+                        setSelectedTenant(tenancy.tenantId);
+                        setIsDeleteModalOpen(true);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete
+                    </Button>
                   </div>
                 </div>
               </motion.div>
@@ -1088,16 +1153,31 @@ const TenantsPage: React.FC = () => {
       >
         <div className="space-y-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-800 font-medium mb-2">⚠️ Warning: This action cannot be undone</p>
-            <p className="text-red-700 text-sm">
-              Deleting this tenant will:
+            <p className="text-red-800 font-medium mb-2">⚠️ Warning</p>
+            <p className="text-red-700 text-sm font-medium mb-2">
+              Soft Delete (Recommended):
             </p>
-            <ul className="text-red-700 text-sm list-disc list-inside mt-2 space-y-1">
-              <li>Mark the tenant as inactive (soft delete)</li>
+            <ul className="text-red-700 text-sm list-disc list-inside space-y-1">
+              <li>Mark the tenant as inactive</li>
               <li>Automatically end all active tenancies</li>
               <li>Free up their room(s)</li>
               <li>Hide them from the active tenants list</li>
+              <li>Keep all historical data and payment records</li>
             </ul>
+
+            {!selectedTenant?.isActive && (
+              <>
+                <p className="text-red-800 text-sm font-medium mt-3 mb-2">
+                  Permanent Delete (Danger Zone):
+                </p>
+                <ul className="text-red-800 text-sm list-disc list-inside space-y-1">
+                  <li className="font-semibold">⚠️ This CANNOT be undone!</li>
+                  <li>Removes ALL tenant records from database</li>
+                  <li>Deletes all tenancies, payments, rents, and bills</li>
+                  <li>Only available for inactive (past) tenants</li>
+                </ul>
+              </>
+            )}
           </div>
 
           <p className="text-gray-700">
@@ -1110,6 +1190,16 @@ const TenantsPage: React.FC = () => {
           {selectedTenant?.tenantId && (
             <p className="text-sm text-gray-600">
               Tenant ID: {selectedTenant.tenantId}
+            </p>
+          )}
+
+          {selectedTenant?.isActive ? (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+              This is an active tenant. Only soft delete is available.
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded p-2">
+              This is a past tenant. You can choose soft delete or permanent delete.
             </p>
           )}
 
@@ -1130,8 +1220,8 @@ const TenantsPage: React.FC = () => {
                   deleteTenantMutation.mutate(selectedTenant._id || selectedTenant.id);
                 }
               }}
-              className="bg-red-600 hover:bg-red-700 text-white"
-              disabled={deleteTenantMutation.isPending}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              disabled={deleteTenantMutation.isPending || permanentDeleteTenantMutation.isPending}
             >
               {deleteTenantMutation.isPending ? (
                 <>
@@ -1141,10 +1231,33 @@ const TenantsPage: React.FC = () => {
               ) : (
                 <>
                   <Trash2 className="w-4 h-4 mr-2" />
-                  Yes, Delete Tenant
+                  Soft Delete
                 </>
               )}
             </Button>
+            {!selectedTenant?.isActive && (
+              <Button
+                onClick={() => {
+                  if (selectedTenant && window.confirm('⚠️ FINAL WARNING: This will permanently delete ALL records for this tenant. This action CANNOT be undone! Are you absolutely sure?')) {
+                    permanentDeleteTenantMutation.mutate(selectedTenant._id || selectedTenant.id);
+                  }
+                }}
+                className="bg-red-700 hover:bg-red-800 text-white"
+                disabled={deleteTenantMutation.isPending || permanentDeleteTenantMutation.isPending}
+              >
+                {permanentDeleteTenantMutation.isPending ? (
+                  <>
+                    <LoadingSpinner size="sm" />
+                    <span className="ml-2">Deleting Permanently...</span>
+                  </>
+                ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Permanent Delete
+                </>
+              )}
+              </Button>
+            )}
           </div>
         </div>
       </Modal>

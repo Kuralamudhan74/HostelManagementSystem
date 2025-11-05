@@ -36,6 +36,21 @@ const refreshTokenSchema = z.object({
   })
 });
 
+const changePasswordSchema = z.object({
+  body: z.object({
+    currentPassword: z.string().min(6).optional(),
+    secretCode: z.string().optional(),
+    newPassword: z.string().min(6),
+    confirmPassword: z.string().min(6)
+  }).refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"]
+  }).refine((data) => data.currentPassword || data.secretCode, {
+    message: "Either current password or secret code is required",
+    path: ["currentPassword"]
+  })
+});
+
 // Login controller
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -339,4 +354,62 @@ export const logout = async (req: AuthRequest, res: Response): Promise<void> => 
   }
 };
 
-export { loginSchema, registerSchema, refreshTokenSchema };
+// Change password controller (with secret code option)
+export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { currentPassword, secretCode, newPassword } = req.body;
+    const userId = req.user!._id;
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    // Verify authentication method
+    let isAuthenticated = false;
+
+    // Method 1: Verify current password
+    if (currentPassword) {
+      const isPasswordValid = await comparePassword(currentPassword, user.password);
+      if (isPasswordValid) {
+        isAuthenticated = true;
+      }
+    }
+
+    // Method 2: Verify secret code (93959)
+    if (secretCode && secretCode === '93959') {
+      isAuthenticated = true;
+    }
+
+    if (!isAuthenticated) {
+      res.status(401).json({ message: 'Invalid current password or secret code' });
+      return;
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update password
+    const oldPasswordHash = user.password;
+    user.password = hashedPassword;
+    await user.save();
+
+    // Log password change
+    await logAction(req.user!, 'User', userId, 'update',
+      { passwordChanged: true },
+      { passwordChanged: true, timestamp: new Date() }
+    );
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (error: any) {
+    console.error('Change password error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+export { loginSchema, registerSchema, refreshTokenSchema, changePasswordSchema };

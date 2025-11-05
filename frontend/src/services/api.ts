@@ -98,6 +98,11 @@ class ApiClient {
     return response.data;
   }
 
+  async changePassword(data: { currentPassword?: string; secretCode?: string; newPassword: string; confirmPassword: string }): Promise<{ message: string }> {
+    const response = await this.client.post('/me/change-password', data);
+    return response.data;
+  }
+
   // Admin endpoints
   async getHostels(): Promise<{ hostels: any[] }> {
     const response = await this.client.get('/admin/hostels');
@@ -177,6 +182,11 @@ class ApiClient {
 
   async deleteTenant(tenantId: string): Promise<{ message: string; tenanciesEnded: number }> {
     const response = await this.client.delete(`/admin/tenants/${tenantId}`);
+    return response.data;
+  }
+
+  async permanentlyDeleteTenant(tenantId: string): Promise<{ message: string; deletedRecords: any }> {
+    const response = await this.client.delete(`/admin/tenants/${tenantId}/permanent`);
     return response.data;
   }
 

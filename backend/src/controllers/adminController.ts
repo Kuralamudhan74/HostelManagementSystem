@@ -1,17 +1,18 @@
 import { Response } from 'express';
 import { z } from 'zod';
 import { hashPassword } from '../middleware/auth';
-import { 
-  Hostel, 
-  Room, 
+import {
+  Hostel,
+  Room,
   RoomEBBill,
-  Tenancy, 
-  User, 
-  MonthlyRent, 
-  Bill, 
-  ExpenseCategory, 
+  Tenancy,
+  User,
+  MonthlyRent,
+  Bill,
+  ExpenseCategory,
   Expense,
   Payment,
+  PaymentAllocation,
   IHostel,
   IRoom,
   ITenancy,
@@ -456,19 +457,20 @@ export const getTenants = async (req: AuthRequest, res: Response) => {
       } else if (active === 'false') {
         userQuery.isActive = false;
       }
-      allTenantUsers = await User.find(userQuery).select('_id tenantId firstName lastName phone email isActive');
+      // Include ALL profile fields for CSV export (exclude only password)
+      allTenantUsers = await User.find(userQuery).select('-password');
     }
 
     const query: any = {};
-    
+
     if (hostelId) {
       query['room.hostelId'] = hostelId;
     }
-    
+
     if (room) {
       query['room.roomNumber'] = { $regex: room, $options: 'i' };
     }
-    
+
     if (name) {
       query['tenant.firstName'] = { $regex: name, $options: 'i' };
     }
@@ -483,7 +485,10 @@ export const getTenants = async (req: AuthRequest, res: Response) => {
 
     const tenancies = await Tenancy.find(query)
       .populate('roomId', 'roomNumber hostelId')
-      .populate('tenantId', 'firstName lastName tenantId phone email isActive')
+      .populate({
+        path: 'tenantId',
+        select: '-password' // Include all fields except password
+      })
       .populate('roomId.hostelId', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -1115,6 +1120,96 @@ export const deleteTenant = async (req: AuthRequest, res: Response): Promise<voi
     });
   } catch (error: any) {
     console.error('Delete tenant error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Permanent delete tenant - ONLY for past tenants (removes all records from DB)
+export const permanentlyDeleteTenant = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenantId } = req.params;
+
+    const user = await User.findById(tenantId);
+
+    if (!user) {
+      res.status(404).json({ message: 'Tenant not found' });
+      return;
+    }
+
+    if (user.role !== 'tenant') {
+      res.status(400).json({ message: 'Can only delete tenant users' });
+      return;
+    }
+
+    // Check if tenant has any active tenancies
+    const activeTenancies = await Tenancy.find({ tenantId: user._id, isActive: true });
+    if (activeTenancies.length > 0) {
+      res.status(400).json({
+        message: 'Cannot permanently delete an active tenant. Please end their tenancy first.',
+        activeTenancies: activeTenancies.length
+      });
+      return;
+    }
+
+    // Log the permanent deletion BEFORE deleting
+    await logAction(req.user!, 'User', user._id, 'delete',
+      {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        tenantId: user.tenantId
+      },
+      { permanentlyDeleted: true, deletedAt: new Date() });
+
+    const userName = `${user.firstName} ${user.lastName}`;
+    const userId = user._id;
+
+    // Permanent deletion - remove ALL records from database
+    // 1. Delete all tenancies
+    const tenanciesDeleted = await Tenancy.deleteMany({ tenantId: userId });
+    console.log(`Deleted ${tenanciesDeleted.deletedCount} tenancies for tenant ${userName}`);
+
+    // 2. Delete all payments
+    const paymentsDeleted = await Payment.deleteMany({ tenantId: userId });
+    console.log(`Deleted ${paymentsDeleted.deletedCount} payments for tenant ${userName}`);
+
+    // 3. Delete all monthly rents associated with this tenant's tenancies
+    const rentsDeleted = await MonthlyRent.deleteMany({
+      tenancyId: { $in: (await Tenancy.find({ tenantId: userId })).map(t => t._id) }
+    });
+    console.log(`Deleted ${rentsDeleted.deletedCount} rent records for tenant ${userName}`);
+
+    // 4. Delete all bills associated with this tenant
+    const billsDeleted = await Bill.deleteMany({ tenantId: userId });
+    console.log(`Deleted ${billsDeleted.deletedCount} bills for tenant ${userName}`);
+
+    // 5. Delete payment allocations (cleanup orphaned records)
+    const paymentAllocationsDeleted = await PaymentAllocation.deleteMany({
+      paymentId: { $in: (await Payment.find({ tenantId: userId })).map(p => p._id) }
+    });
+    console.log(`Deleted ${paymentAllocationsDeleted.deletedCount} payment allocations for tenant ${userName}`);
+
+    // 6. Finally, delete the user record
+    await User.findByIdAndDelete(userId);
+    console.log(`Permanently deleted user ${userName} (ID: ${userId})`);
+
+    res.json({
+      message: `Tenant ${userName} and all associated records permanently deleted`,
+      deletedRecords: {
+        tenancies: tenanciesDeleted.deletedCount,
+        payments: paymentsDeleted.deletedCount,
+        rents: rentsDeleted.deletedCount,
+        bills: billsDeleted.deletedCount,
+        paymentAllocations: paymentAllocationsDeleted.deletedCount,
+        user: 1
+      }
+    });
+  } catch (error: any) {
+    console.error('Permanent delete tenant error:', error);
     res.status(500).json({
       message: error.message || 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined

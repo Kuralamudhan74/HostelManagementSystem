@@ -1,14 +1,16 @@
 import { Router } from 'express';
-import { 
-  login, 
-  register, 
-  refreshToken, 
-  getProfile, 
-  updateProfile, 
+import {
+  login,
+  register,
+  refreshToken,
+  getProfile,
+  updateProfile,
   logout,
+  changePassword,
   loginSchema,
   registerSchema,
-  refreshTokenSchema
+  refreshTokenSchema,
+  changePasswordSchema
 } from '../controllers/authController';
 import { 
   createHostel,
@@ -76,6 +78,7 @@ router.post('/auth/logout', authenticate, logout);
 // User profile routes
 router.get('/me', authenticate, getProfile);
 router.patch('/me', authenticate, updateProfile);
+router.post('/me/change-password', authenticate, validate(changePasswordSchema), changePassword);
 
 // Admin routes
 router.get('/admin/dashboard/stats', authenticate, requireAdmin, getDashboardStats);
@@ -122,6 +125,10 @@ router.patch('/admin/tenants/:tenantId/status', authenticate, requireAdmin, asyn
 router.delete('/admin/tenants/:tenantId', authenticate, requireAdmin, async (req, res, next) => {
   const { deleteTenant } = await import('../controllers/adminController');
   return deleteTenant(req as any, res);
+});
+router.delete('/admin/tenants/:tenantId/permanent', authenticate, requireAdmin, async (req, res, next) => {
+  const { permanentlyDeleteTenant } = await import('../controllers/adminController');
+  return permanentlyDeleteTenant(req as any, res);
 });
 
 // Tenant CSV import route
