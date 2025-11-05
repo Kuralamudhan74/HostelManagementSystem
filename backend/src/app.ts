@@ -25,13 +25,31 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'), // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+// Rate limiting configuration
+// Development: High limits for hot reload and testing
+// Production: Stricter limits for security
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+// General API rate limiter - applied to all /api routes
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: isDevelopment ? 1000 : 500, // Dev: 1000 req/15min, Prod: 500 req/15min
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Skip rate limiting for health check
+  skip: (req) => req.path === '/health'
 });
-app.use(limiter);
+
+// Strict rate limiter for authentication routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: isDevelopment ? 100 : 20, // Dev: 100 attempts, Prod: 20 attempts per 15 minutes
+  message: 'Too many authentication attempts from this IP, please try again after 15 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // Don't count successful requests
+});
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -56,8 +74,12 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API routes
-app.use('/api', routes);
+// Apply general rate limiter to all API routes
+app.use('/api', apiLimiter, routes);
+
+// Apply strict rate limiter to auth routes specifically
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
 
 // Error handling middleware
 app.use(notFound);
