@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import routes from './routes';
@@ -36,6 +37,9 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Cookie parsing middleware
+app.use(cookieParser());
+
 // Logging middleware
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
@@ -62,7 +66,7 @@ app.use(errorHandler);
 // Database connection
 const connectDB = async () => {
   try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hostel-management';
+    const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://kuralamu04_db_user:xuwJLV4ualU4Knkx@hostelmanagement.mmoyaf1.mongodb.net/?appName=hostelmanagement';
     
     await mongoose.connect(mongoURI);
     console.log('MongoDB connected successfully');

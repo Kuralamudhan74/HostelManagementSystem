@@ -85,10 +85,28 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       // Continue with login even if audit logging fails
     }
 
+    // Set httpOnly cookies for tokens
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
+      httpOnly: true, // Prevents JavaScript access (XSS protection)
+      secure: isProduction, // Only send over HTTPS in production
+      sameSite: isProduction ? 'strict' as const : 'lax' as const, // CSRF protection
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (matches refresh token)
+      path: '/', // Available on all routes
+    };
+
+    // Set accessToken cookie with shorter expiry
+    res.cookie('accessToken', accessToken, {
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    // Set refreshToken cookie
+    res.cookie('refreshToken', refreshToken, cookieOptions);
+
+    // Return user data only (no tokens in response body)
     res.json({
       message: 'Login successful',
-      accessToken,
-      refreshToken,
       user: {
         id: user._id,
         email: user.email,
@@ -161,7 +179,8 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
 // Refresh token controller
 export const refreshToken = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { refreshToken } = req.body;
+    // Try to get refresh token from cookie first, then fallback to body
+    let refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
 
     if (!refreshToken) {
       res.status(401).json({ message: 'Refresh token required' });
@@ -170,7 +189,7 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
 
     // Verify refresh token
     const decoded = verifyRefreshToken(refreshToken);
-    
+
     // Find user
     const user = await User.findById(decoded.userId);
     if (!user || !user.isActive) {
@@ -188,9 +207,32 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
     const newAccessToken = generateToken(tokenPayload);
     const newRefreshToken = generateRefreshToken(tokenPayload);
 
+    // Set new cookies
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' as const : 'lax' as const,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/',
+    };
+
+    res.cookie('accessToken', newAccessToken, {
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.cookie('refreshToken', newRefreshToken, cookieOptions);
+
     res.json({
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken
+      message: 'Token refreshed successfully',
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
+      }
     });
   } catch (error) {
     console.error('Refresh token error:', error);
@@ -286,8 +328,10 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
 // Logout controller
 export const logout = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // In a production app, you might want to blacklist the token
-    // For now, we'll just return a success message
+    // Clear authentication cookies
+    res.clearCookie('accessToken', { path: '/' });
+    res.clearCookie('refreshToken', { path: '/' });
+
     res.json({ message: 'Logout successful' });
   } catch (error) {
     console.error('Logout error:', error);

@@ -52,29 +52,37 @@ export const comparePassword = async (password: string, hashedPassword: string):
   return bcrypt.compare(password, hashedPassword);
 };
 
-// Authentication middleware
+// Authentication middleware - supports both cookies (preferred) and Authorization header (fallback)
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.error('No auth header or invalid format:', authHeader ? 'Present but invalid' : 'Missing');
+    // Try to get token from cookie first (preferred method)
+    let token = req.cookies?.accessToken;
+
+    // Fallback to Authorization header for backwards compatibility
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
+
+    if (!token) {
+      console.error('No access token found in cookies or headers');
       res.status(401).json({ message: 'Access token required' });
       return;
     }
 
-    const token = authHeader.substring(7);
     const decoded = verifyToken(token);
-    
+
     console.log('Decoded token:', { userId: decoded.userId, email: decoded.email, role: decoded.role });
-    
+
     const user = await User.findById(decoded.userId).select('-password');
     if (!user) {
       console.error('User not found:', decoded.userId);
       res.status(401).json({ message: 'User not found' });
       return;
     }
-    
+
     if (!user.isActive) {
       console.error('User is not active:', decoded.userId);
       res.status(401).json({ message: 'User account is inactive' });

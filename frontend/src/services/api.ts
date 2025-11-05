@@ -1,6 +1,6 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import toast from 'react-hot-toast';
-import { AuthUser, LoginForm, RegisterForm, PaymentForm, PaymentAllocationData } from '../types';
+import { LoginForm, RegisterForm, PaymentForm, PaymentAllocationData } from '../types';
 
 class ApiClient {
   private client: AxiosInstance;
@@ -12,15 +12,12 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
+      withCredentials: true, // Enable sending/receiving cookies
     });
 
-    // Request interceptor to add auth token
+    // Request interceptor - cookies are sent automatically, no need to add headers
     this.client.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem('accessToken');
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
         return config;
       },
       (error) => {
@@ -34,43 +31,27 @@ class ApiClient {
       async (error) => {
         const originalRequest = error.config;
 
+        // Handle 401 errors (token expired) - but only retry once
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
 
           try {
-            const refreshToken = localStorage.getItem('refreshToken');
-            if (refreshToken) {
-              // Use axios directly for refresh to avoid infinite loop
-              const response = await axios.post('/api/auth/refresh', {
-                refreshToken,
-              }, {
-                headers: {
-                  'Content-Type': 'application/json'
-                }
-              });
-
-              const { accessToken, refreshToken: newRefreshToken } = response.data;
-              localStorage.setItem('accessToken', accessToken);
-              localStorage.setItem('refreshToken', newRefreshToken);
-
-              // Retry original request with new token
-              originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-              return axios(originalRequest);
-            } else {
-              // No refresh token, redirect to login
-              localStorage.removeItem('accessToken');
-              localStorage.removeItem('refreshToken');
-              if (window.location.pathname !== '/login') {
-                window.location.href = '/login';
+            // Try to refresh token - cookies are sent automatically
+            await axios.post('/api/auth/refresh', {}, {
+              withCredentials: true, // Important: send cookies with refresh request
+              headers: {
+                'Content-Type': 'application/json'
               }
-            }
+            });
+
+            // Token refreshed successfully, retry the original request
+            return this.client(originalRequest);
           } catch (refreshError) {
             // Refresh failed, redirect to login
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
             if (window.location.pathname !== '/login') {
               window.location.href = '/login';
             }
+            return Promise.reject(refreshError);
           }
         }
 
@@ -86,8 +67,8 @@ class ApiClient {
   }
 
   // Auth endpoints
-  async login(credentials: LoginForm): Promise<AuthUser> {
-    const response: AxiosResponse<AuthUser> = await this.client.post('/auth/login', credentials);
+  async login(credentials: LoginForm): Promise<{ message: string; user: any }> {
+    const response = await this.client.post('/auth/login', credentials);
     return response.data;
   }
 
@@ -96,15 +77,14 @@ class ApiClient {
     return response.data;
   }
 
-  async refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
-    const response = await this.client.post('/auth/refresh', { refreshToken });
+  async refreshToken(): Promise<{ message: string; user: any }> {
+    const response = await this.client.post('/auth/refresh', {});
     return response.data;
   }
 
   async logout(): Promise<void> {
     await this.client.post('/auth/logout');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+    // Cookies are cleared by the server
   }
 
   // User profile endpoints
