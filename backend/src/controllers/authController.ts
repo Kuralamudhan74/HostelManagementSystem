@@ -105,7 +105,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const cookieOptions = {
       httpOnly: true, // Prevents JavaScript access (XSS protection)
       secure: isProduction, // Only send over HTTPS in production
-      sameSite: isProduction ? 'strict' as const : 'lax' as const, // CSRF protection
+      sameSite: isProduction ? 'none' as const : 'lax' as const, // 'none' allows cross-origin cookies in production
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (matches refresh token)
       path: '/', // Available on all routes
     };
