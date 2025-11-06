@@ -8,9 +8,13 @@ dotenv.config();
 const generateMonthlyRent = async () => {
   try {
     // Connect to MongoDB
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hostel-management';
+    const mongoURI = process.env.MONGODB_URI;
+    if (!mongoURI) {
+      console.error('❌ MONGODB_URI environment variable is required');
+      process.exit(1);
+    }
     await mongoose.connect(mongoURI);
-    console.log('Connected to MongoDB');
+    console.log('✅ Connected to MongoDB');
 
     // Get current month in YYYY-MM format
     const currentDate = new Date();

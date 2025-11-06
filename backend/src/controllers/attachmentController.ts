@@ -12,7 +12,11 @@ import { logAction } from '../utils/auditLogger';
 // Configure multer for local file storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = process.env.UPLOADS_DIR || './uploads';
+    const uploadDir = process.env.UPLOADS_DIR;
+    if (!uploadDir) {
+      cb(new Error('UPLOADS_DIR environment variable is required'), '');
+      return;
+    }
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -25,12 +29,17 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedTypes = (process.env.ALLOWED_FILE_TYPES || 'image/jpeg,image/png,image/gif,application/pdf').split(',');
-  
-  if (allowedTypes.includes(file.mimetype)) {
+  const allowedTypes = process.env.ALLOWED_FILE_TYPES;
+  if (!allowedTypes) {
+    cb(new Error('ALLOWED_FILE_TYPES environment variable is required'));
+    return;
+  }
+
+  const allowedTypesArray = allowedTypes.split(',');
+  if (allowedTypesArray.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type'));
+    cb(new Error(`Invalid file type. Allowed types: ${allowedTypes}`));
   }
 };
 
@@ -38,7 +47,7 @@ export const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE || '10485760') // 10MB default
+    fileSize: parseInt(process.env.MAX_FILE_SIZE || '10485760') // Keep 10MB as fallback for limits
   }
 });
 

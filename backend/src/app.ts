@@ -21,7 +21,7 @@ app.use(compression());
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN,
   credentials: true
 }));
 
@@ -88,12 +88,18 @@ app.use(errorHandler);
 // Database connection
 const connectDB = async () => {
   try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://kuralamu04_db_user:xuwJLV4ualU4Knkx@hostelmanagement.mmoyaf1.mongodb.net/?appName=hostelmanagement';
-    
+    const mongoURI = process.env.MONGODB_URI;
+
+    if (!mongoURI) {
+      console.error('❌ MONGODB_URI environment variable is required');
+      console.error('Please set MONGODB_URI in your .env file');
+      process.exit(1);
+    }
+
     await mongoose.connect(mongoURI);
-    console.log('MongoDB connected successfully');
+    console.log('✅ MongoDB connected successfully');
   } catch (error) {
-    console.error('MongoDB connection error:', error);
+    console.error('❌ MongoDB connection error:', error);
     process.exit(1);
   }
 };

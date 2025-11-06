@@ -15,7 +15,10 @@ export interface JWTPayload {
 
 // Generate JWT token
 export const generateToken = (payload: JWTPayload): string => {
-  const secret = process.env.JWT_SECRET || 'fallback-secret';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is required');
+  }
   return jwt.sign(payload, secret, {
     expiresIn: process.env.JWT_EXPIRES_IN || '15m'
   } as jwt.SignOptions);
@@ -23,7 +26,10 @@ export const generateToken = (payload: JWTPayload): string => {
 
 // Generate refresh token
 export const generateRefreshToken = (payload: JWTPayload): string => {
-  const secret = process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret';
+  const secret = process.env.JWT_REFRESH_SECRET;
+  if (!secret) {
+    throw new Error('JWT_REFRESH_SECRET environment variable is required');
+  }
   return jwt.sign(payload, secret, {
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
   } as jwt.SignOptions);
@@ -31,13 +37,19 @@ export const generateRefreshToken = (payload: JWTPayload): string => {
 
 // Verify JWT token
 export const verifyToken = (token: string): JWTPayload => {
-  const secret = process.env.JWT_SECRET || 'fallback-secret';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is required');
+  }
   return jwt.verify(token, secret) as JWTPayload;
 };
 
 // Verify refresh token
 export const verifyRefreshToken = (token: string): JWTPayload => {
-  const secret = process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret';
+  const secret = process.env.JWT_REFRESH_SECRET;
+  if (!secret) {
+    throw new Error('JWT_REFRESH_SECRET environment variable is required');
+  }
   return jwt.verify(token, secret) as JWTPayload;
 };
 
