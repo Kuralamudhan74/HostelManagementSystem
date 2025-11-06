@@ -227,7 +227,7 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
     const cookieOptions = {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? 'strict' as const : 'lax' as const,
+      sameSite: isProduction ? 'none' as const : 'lax' as const, // 'none' allows cross-origin cookies in production
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       path: '/',
     };
