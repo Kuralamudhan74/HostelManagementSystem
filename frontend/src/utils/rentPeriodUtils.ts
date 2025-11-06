@@ -325,7 +325,7 @@ export interface PaymentStatusInfo {
 }
 
 export function getPaymentStatus(
-  periodStart: Date,
+  _periodStart: Date,
   periodEnd: Date,
   hasPayment: boolean,
   today: Date = new Date()

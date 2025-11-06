@@ -1,22 +1,19 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
-import { 
-  ArrowLeft, 
-  DollarSign, 
-  TrendingUp, 
+import {
+  ArrowLeft,
+  DollarSign,
+  TrendingUp,
   TrendingDown,
   Building2,
-  Calendar,
   Download,
   BarChart3
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  BarChart, 
-  Bar, 
-  Line, 
-  LineChart,
+import {
+  Bar,
+  Line,
   ComposedChart,
   XAxis, 
   YAxis, 

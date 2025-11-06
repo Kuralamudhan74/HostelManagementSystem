@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Save, Receipt, Lock, Key } from 'lucide-react';
+import { ArrowLeft, Save, Lock, Key } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import Button from '../components/Button';
 import LoadingSpinner from '../components/LoadingSpinner';
 import apiClient from '../services/api';
 import toast from 'react-hot-toast';
-import { formatCurrency } from '../utils';
 import Modal from '../components/Modal';
 
 const ProfilePage: React.FC = () => {

@@ -12,8 +12,7 @@ import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { 
-  calculateCurrentRentPeriod, 
+import {
   calculateCurrentRentPeriodWithPayments,
   formatDateForDisplay,
   getPaymentStatus,
@@ -131,20 +130,6 @@ const TenantsPage: React.FC = () => {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to unassign tenant');
-    },
-  });
-
-  // Update tenant status mutation
-  const updateTenantStatusMutation = useMutation({
-    mutationFn: ({ tenantId, isActive }: { tenantId: string; isActive: boolean }) =>
-      apiClient.updateTenantStatus(tenantId, isActive),
-    onSuccess: () => {
-      toast.success('Tenant status updated successfully');
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update tenant status');
     },
   });
 
@@ -300,13 +285,6 @@ const TenantsPage: React.FC = () => {
     }));
   };
 
-  const handleToggleStatus = (tenant: any, currentStatus: boolean) => {
-    updateTenantStatusMutation.mutate({
-      tenantId: tenant._id || tenant.id,
-      isActive: !currentStatus
-    });
-  };
-
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -368,7 +346,6 @@ const TenantsPage: React.FC = () => {
         tenantId,
         startDate: data.startDate,
         tenantShare: data.tenantShare,
-        withFood: data.withFood || false,
       });
       toast.success('Tenant assigned to room successfully');
       setIsAssignRoomModalOpen(false);
@@ -611,7 +588,7 @@ const TenantsPage: React.FC = () => {
 
                   const csvContent = [
                     headers.join(','),
-                    ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+                    ...rows.map((row: any[]) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
                   ].join('\n');
 
                   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

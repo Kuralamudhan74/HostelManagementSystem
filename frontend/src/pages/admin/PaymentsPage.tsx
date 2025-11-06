@@ -12,27 +12,24 @@ import { useForm, Controller } from 'react-hook-form';
 import { formatCurrency } from '../../utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { 
-  calculateCurrentRentPeriod, 
+import {
   calculateCurrentRentPeriodWithPayments,
   calculateNextPeriodFromManualEnd,
   formatDateForDisplay,
   getPaymentStatus,
-  isPaymentPeriodValid,
-  normalizeDate,
-  type PaymentStatusInfo
+  isPaymentPeriodValid
 } from '../../utils/rentPeriodUtils';
 
 const paymentSchema = z.object({
   tenantId: z.string().min(1, 'Tenant is required'),
   amount: z.number().min(0.01, 'Amount must be greater than 0'),
-  paymentMethod: z.enum(['cash', 'bank_transfer', 'cheque', 'other']),
+  paymentMethod: z.string().min(1, 'Payment method is required'),
   paymentDate: z.string().min(1, 'Payment date is required'),
-  paymentPeriodStart: z.string().optional(),
-  paymentPeriodEnd: z.string().optional(),
+  paymentPeriodStart: z.string(),
+  paymentPeriodEnd: z.string(),
   description: z.string().optional(),
   paymentType: z.enum(['full', 'partial']),
-  remainingAmount: z.number().min(0).optional(),
+  remainingAmount: z.number().min(0),
 }).refine((data) => {
   // Validate that period start is before period end if both are provided
   if (data.paymentPeriodStart && data.paymentPeriodEnd) {
@@ -55,6 +52,8 @@ const paymentSchema = z.object({
   path: ['remainingAmount'],
 });
 
+type PaymentFormData = z.infer<typeof paymentSchema>;
+
 const PaymentsPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -74,13 +73,16 @@ const PaymentsPage: React.FC = () => {
   const [debouncedStartDate, setDebouncedStartDate] = useState<string>('');
   const [debouncedEndDate, setDebouncedEndDate] = useState<string>('');
 
-  const { register, handleSubmit, formState: { errors }, reset, control, watch, setValue } = useForm({
+  const { register, handleSubmit, formState: { errors }, reset, control, watch, setValue } = useForm<PaymentFormData>({
     resolver: zodResolver(paymentSchema),
     defaultValues: {
+      tenantId: '',
+      amount: 0,
       paymentMethod: 'cash',
       paymentDate: new Date().toISOString().split('T')[0],
       paymentPeriodStart: '',
       paymentPeriodEnd: '',
+      description: '',
       paymentType: 'full' as 'full' | 'partial',
       remainingAmount: 0,
     }
@@ -265,7 +267,6 @@ const PaymentsPage: React.FC = () => {
   };
 
   const payments = paymentsData?.payments || [];
-  const amount = watch('amount');
 
   const paymentMethodLabels = {
     cash: 'Cash',
@@ -577,7 +578,7 @@ const PaymentsPage: React.FC = () => {
               )}
               {paymentAmount && paymentType === 'partial' && (
                 <p className="text-xs text-gray-500 mt-1">
-                  Total Due: {formatCurrency(paymentAmount + (watch('remainingAmount') || 0))}
+                  Total Due: {formatCurrency(Number(paymentAmount) + (Number(watch('remainingAmount')) || 0))}
                 </p>
               )}
             </div>

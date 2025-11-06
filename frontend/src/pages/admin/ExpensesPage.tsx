@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, ArrowLeft, Plus, Filter, Calendar, Building2, Tag, TrendingDown, Download } from 'lucide-react';
+import { FileText, ArrowLeft, Plus, Calendar, Building2, Tag, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -22,6 +22,8 @@ const expenseSchema = z.object({
   expenseDate: z.string().min(1, 'Expense date is required'),
 });
 
+type ExpenseFormData = z.infer<typeof expenseSchema>;
+
 const PaymentsPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -39,9 +41,13 @@ const PaymentsPage: React.FC = () => {
   const [debouncedStartDate, setDebouncedStartDate] = useState<string>('');
   const [debouncedEndDate, setDebouncedEndDate] = useState<string>('');
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm({
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<ExpenseFormData>({
     resolver: zodResolver(expenseSchema),
     defaultValues: {
+      hostelId: '',
+      categoryId: '',
+      amount: 0,
+      description: '',
       expenseDate: new Date().toISOString().split('T')[0],
     }
   });

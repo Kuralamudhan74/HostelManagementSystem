@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, ArrowLeft, Plus, Users, CheckCircle, Search, Trash2, Zap, DollarSign, AirVent, Bath } from 'lucide-react';
+import { Building2, ArrowLeft, Plus, Users, CheckCircle, Search, Trash2, Zap, AirVent, Bath } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
