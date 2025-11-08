@@ -118,7 +118,7 @@ export const uploadAttachment = async (req: AuthRequest, res: Response): Promise
         const attachment = new Attachment(attachmentData);
         await attachment.save();
 
-        await logAction(req.user!, 'Attachment', attachment._id, 'create', null, {
+        await logAction(req.user, 'Attachment', attachment._id, 'create', null, {
           filename: attachment.filename,
           originalName: attachment.originalName,
           storageType: attachment.storageType
@@ -143,7 +143,7 @@ export const uploadAttachment = async (req: AuthRequest, res: Response): Promise
       const attachment = new Attachment(attachmentData);
       await attachment.save();
 
-      await logAction(req.user!, 'Attachment', attachment._id, 'create', null, {
+      await logAction(req.user, 'Attachment', attachment._id, 'create', null, {
         filename: attachment.filename,
         originalName: attachment.originalName,
         storageType: attachment.storageType
@@ -246,11 +246,8 @@ export const deleteAttachment = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    // Check if user has permission to delete
-    if (attachment.uploadedBy.toString() !== req.user!._id && req.user!.role !== 'admin') {
-      res.status(403).json({ message: 'Permission denied' });
-      return;
-    }
+    // Note: With API key auth, any authenticated request can delete attachments
+    // Previous user-based authorization removed for simplicity
 
     // Delete file from storage
     if (attachment.storageType === 'gridfs') {
@@ -262,7 +259,7 @@ export const deleteAttachment = async (req: AuthRequest, res: Response): Promise
     // Delete from database
     await Attachment.findByIdAndDelete(id);
 
-    await logAction(req.user!, 'Attachment', id, 'delete', {
+    await logAction(req.user, 'Attachment', id, 'delete', {
       filename: attachment.filename,
       originalName: attachment.originalName
     }, null);

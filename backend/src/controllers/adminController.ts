@@ -89,7 +89,7 @@ export const createHostel = async (req: AuthRequest, res: Response) => {
 
     await hostel.save();
 
-    await logAction(req.user!, 'Hostel', hostel._id, 'create', null, {
+    await logAction(req.user, 'Hostel', hostel._id, 'create', null, {
       name: hostel.name,
       address: hostel.address,
       ownerId: hostel.ownerId
@@ -153,7 +153,7 @@ export const deleteHostel = async (req: AuthRequest, res: Response): Promise<voi
     // Set all rooms to inactive
     await Room.updateMany({ hostelId }, { isActive: false });
 
-    await logAction(req.user!, 'Hostel', hostel._id, 'delete', {
+    await logAction(req.user, 'Hostel', hostel._id, 'delete', {
       name: hostel.name,
       address: hostel.address
     }, null);
@@ -211,7 +211,7 @@ export const createRoom = async (req: AuthRequest, res: Response): Promise<void>
 
     console.log('Hostel room count updated:', updatedHostel.totalRooms);
 
-    await logAction(req.user!, 'Room', room._id, 'create', null, {
+    await logAction(req.user, 'Room', room._id, 'create', null, {
       roomNumber: room.roomNumber,
       hostelId: room.hostelId,
       capacity: room.capacity,
@@ -290,7 +290,7 @@ export const deleteRoom = async (req: AuthRequest, res: Response): Promise<void>
       $inc: { totalRooms: -1 }
     });
 
-    await logAction(req.user!, 'Room', room._id, 'delete', {
+    await logAction(req.user, 'Room', room._id, 'delete', {
       roomNumber: room.roomNumber,
       hostelId: room.hostelId
     }, null);
@@ -375,7 +375,7 @@ export const addTenantToRoom = async (req: AuthRequest, res: Response): Promise<
 
     await tenancy.save();
 
-    await logAction(req.user!, 'Tenancy', tenancy._id, 'create', null, {
+    await logAction(req.user, 'Tenancy', tenancy._id, 'create', null, {
       roomId: tenancy.roomId,
       tenantId: tenancy.tenantId,
       startDate: tenancy.startDate,
@@ -413,7 +413,7 @@ export const endTenancy = async (req: AuthRequest, res: Response): Promise<void>
     tenancy.endDate = new Date();
     await tenancy.save();
 
-    await logAction(req.user!, 'Tenancy', tenancy._id, 'update', {
+    await logAction(req.user, 'Tenancy', tenancy._id, 'update', {
       isActive: true,
       endDate: null
     }, {
@@ -593,7 +593,7 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
       allocations: finalAllocations
     });
 
-    await logAction(req.user!, 'Payment', payment._id, 'create', null, {
+    await logAction(req.user, 'Payment', payment._id, 'create', null, {
       tenantId,
       amount,
       paymentMethod,
@@ -702,7 +702,7 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
 
     await expense.save();
 
-    await logAction(req.user!, 'Expense', expense._id, 'create', null, {
+    await logAction(req.user, 'Expense', expense._id, 'create', null, {
       hostelId: expense.hostelId,
       categoryId: expense.categoryId,
       amount: expense.amount,
@@ -746,7 +746,7 @@ export const createExpenseCategory = async (req: AuthRequest, res: Response) => 
 
     await category.save();
 
-    await logAction(req.user!, 'ExpenseCategory', category._id, 'create', null, {
+    await logAction(req.user, 'ExpenseCategory', category._id, 'create', null, {
       name: category.name,
       description: category.description
     });
@@ -894,7 +894,7 @@ export const updateTenantProfile = async (req: AuthRequest, res: Response): Prom
     ).select('-password');
 
     // Log profile update
-    await logAction(req.user!, 'User', tenantId, 'update', oldData, updateData);
+    await logAction(req.user, 'User', tenantId, 'update', oldData, updateData);
 
     res.json({
       message: 'Tenant profile updated successfully',
@@ -1011,7 +1011,7 @@ export const createTenant = async (req: AuthRequest, res: Response): Promise<voi
     await newUser.save();
 
     // Log action
-    await logAction(req.user!, 'User', newUser._id, 'create', null, {
+    await logAction(req.user, 'User', newUser._id, 'create', null, {
       tenantId: newUser.tenantId,
       role: 'tenant',
       source: 'Manual Creation'
@@ -1058,7 +1058,7 @@ export const updateTenantStatus = async (req: AuthRequest, res: Response): Promi
       );
     }
 
-    await logAction(req.user!, 'User', user._id, 'update',
+    await logAction(req.user, 'User', user._id, 'update',
       { isActive: oldStatus },
       { isActive });
 
@@ -1110,7 +1110,7 @@ export const deleteTenant = async (req: AuthRequest, res: Response): Promise<voi
     }
 
     // Log the deletion
-    await logAction(req.user!, 'User', user._id, 'delete',
+    await logAction(req.user, 'User', user._id, 'delete',
       { isActive: oldStatus },
       { isActive: false, deletedAt: new Date() });
 
@@ -1155,7 +1155,7 @@ export const permanentlyDeleteTenant = async (req: AuthRequest, res: Response): 
     }
 
     // Log the permanent deletion BEFORE deleting
-    await logAction(req.user!, 'User', user._id, 'delete',
+    await logAction(req.user, 'User', user._id, 'delete',
       {
         firstName: user.firstName,
         lastName: user.lastName,
@@ -1234,11 +1234,11 @@ export const createOrUpdateEBBill = async (req: AuthRequest, res: Response): Pro
     if (existingBill) {
       existingBill.amount = amount;
       ebBill = await existingBill.save();
-      await logAction(req.user!, 'RoomEBBill', ebBill._id, 'update', { amount: existingBill.amount }, { amount });
+      await logAction(req.user, 'RoomEBBill', ebBill._id, 'update', { amount: existingBill.amount }, { amount });
     } else {
       ebBill = new RoomEBBill({ roomId, amount, period });
       await ebBill.save();
-      await logAction(req.user!, 'RoomEBBill', ebBill._id, 'create', null, { roomId, amount, period });
+      await logAction(req.user, 'RoomEBBill', ebBill._id, 'create', null, { roomId, amount, period });
     }
 
     res.json({
@@ -1303,7 +1303,7 @@ export const updateRentPaymentStatus = async (req: AuthRequest, res: Response): 
 
     await rent.save();
     
-    await logAction(req.user!, 'MonthlyRent', rent._id, 'update', 
+    await logAction(req.user, 'MonthlyRent', rent._id, 'update', 
       { isPaidInFull: oldValue, status: rent.status }, 
       { isPaidInFull, status: rent.status });
 

@@ -168,7 +168,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
     await user.save();
 
     // Log user creation
-    await logAction(req.user!, 'User', user._id, 'create', null, {
+    await logAction(req.user, 'User', user._id, 'create', null, {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
@@ -325,7 +325,7 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     ).select('-password');
 
     // Log profile update
-    await logAction(req.user!, 'User', userId, 'update', null, updateData);
+    await logAction(req.user, 'User', userId, 'update', null, updateData);
 
     res.json({
       message: 'Profile updated successfully',
@@ -397,7 +397,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     await user.save();
 
     // Log password change
-    await logAction(req.user!, 'User', userId, 'update',
+    await logAction(req.user, 'User', userId, 'update',
       { passwordChanged: true },
       { passwordChanged: true, timestamp: new Date() }
     );

@@ -48,6 +48,7 @@ import {
 } from '../controllers/attachmentController';
 import { importTenantsFromCSV } from '../controllers/importController';
 import { authenticate, requireAdmin } from '../middleware/auth';
+import { requireApiKey } from '../middleware/apiKey';
 import { validate } from '../middleware/validation';
 import { upload } from '../controllers/attachmentController';
 import multer from 'multer';
@@ -69,92 +70,91 @@ const csvUpload = multer({
   }
 });
 
-// Authentication routes
+// Authentication routes (for frontend state management only)
 router.post('/auth/login', validate(loginSchema), login);
-router.post('/auth/register', authenticate, requireAdmin, validate(registerSchema), register);
-router.post('/auth/refresh', validate(refreshTokenSchema), refreshToken);
-router.post('/auth/logout', authenticate, logout);
+router.post('/auth/register', requireApiKey, validate(registerSchema), register);
+router.post('/auth/logout', logout);
 
 // User profile routes
-router.get('/me', authenticate, getProfile);
-router.patch('/me', authenticate, updateProfile);
-router.post('/me/change-password', authenticate, validate(changePasswordSchema), changePassword);
+router.get('/me', requireApiKey, getProfile);
+router.patch('/me', requireApiKey, updateProfile);
+router.post('/me/change-password', requireApiKey, validate(changePasswordSchema), changePassword);
 
 // Admin routes
-router.get('/admin/dashboard/stats', authenticate, requireAdmin, getDashboardStats);
-router.get('/admin/financial-overview', authenticate, requireAdmin, async (req, res, next) => {
+router.get('/admin/dashboard/stats', requireApiKey, getDashboardStats);
+router.get('/admin/financial-overview', requireApiKey, async (req, res, next) => {
   const { getFinancialOverview } = await import('../controllers/adminController');
   return getFinancialOverview(req as any, res);
 });
-router.post('/admin/hostels', authenticate, requireAdmin, validate(createHostelSchema), createHostel);
-router.get('/admin/hostels', authenticate, requireAdmin, getHostels);
-router.delete('/admin/hostels/:hostelId', authenticate, requireAdmin, async (req, res, next) => {
+router.post('/admin/hostels', requireApiKey, validate(createHostelSchema), createHostel);
+router.get('/admin/hostels', requireApiKey, getHostels);
+router.delete('/admin/hostels/:hostelId', requireApiKey, async (req, res, next) => {
   const { deleteHostel } = await import('../controllers/adminController');
   return deleteHostel(req as any, res);
 });
 
-router.post('/admin/rooms', authenticate, requireAdmin, validate(createRoomSchema), createRoom);
-router.get('/admin/rooms', authenticate, requireAdmin, getRooms);
-router.delete('/admin/rooms/:roomId', authenticate, requireAdmin, async (req, res, next) => {
+router.post('/admin/rooms', requireApiKey, validate(createRoomSchema), createRoom);
+router.get('/admin/rooms', requireApiKey, getRooms);
+router.delete('/admin/rooms/:roomId', requireApiKey, async (req, res, next) => {
   const { deleteRoom } = await import('../controllers/adminController');
   return deleteRoom(req as any, res);
 });
 
-router.post('/admin/rooms/:roomId/tenants', authenticate, requireAdmin, validate(addTenantToRoomSchema), addTenantToRoom);
-router.patch('/admin/tenancies/:tenancyId/end', authenticate, requireAdmin, async (req, res, next) => {
+router.post('/admin/rooms/:roomId/tenants', requireApiKey, validate(addTenantToRoomSchema), addTenantToRoom);
+router.patch('/admin/tenancies/:tenancyId/end', requireApiKey, async (req, res, next) => {
   const { endTenancy } = await import('../controllers/adminController');
   return endTenancy(req as any, res);
 });
-router.post('/admin/tenants', authenticate, requireAdmin, async (req, res, next) => {
+router.post('/admin/tenants', requireApiKey, async (req, res, next) => {
   const { createTenant } = await import('../controllers/adminController');
   return createTenant(req as any, res);
 });
-router.get('/admin/tenants', authenticate, requireAdmin, getTenants);
-router.get('/admin/tenants/:tenantId/profile', authenticate, requireAdmin, async (req, res, next) => {
+router.get('/admin/tenants', requireApiKey, getTenants);
+router.get('/admin/tenants/:tenantId/profile', requireApiKey, async (req, res, next) => {
   const { getTenantProfile } = await import('../controllers/adminController');
   return getTenantProfile(req as any, res);
 });
-router.patch('/admin/tenants/:tenantId/profile', authenticate, requireAdmin, async (req, res, next) => {
+router.patch('/admin/tenants/:tenantId/profile', requireApiKey, async (req, res, next) => {
   const { updateTenantProfile } = await import('../controllers/adminController');
   return updateTenantProfile(req as any, res);
 });
-router.patch('/admin/tenants/:tenantId/status', authenticate, requireAdmin, async (req, res, next) => {
+router.patch('/admin/tenants/:tenantId/status', requireApiKey, async (req, res, next) => {
   const { updateTenantStatus } = await import('../controllers/adminController');
   return updateTenantStatus(req as any, res);
 });
-router.delete('/admin/tenants/:tenantId', authenticate, requireAdmin, async (req, res, next) => {
+router.delete('/admin/tenants/:tenantId', requireApiKey, async (req, res, next) => {
   const { deleteTenant } = await import('../controllers/adminController');
   return deleteTenant(req as any, res);
 });
-router.delete('/admin/tenants/:tenantId/permanent', authenticate, requireAdmin, async (req, res, next) => {
+router.delete('/admin/tenants/:tenantId/permanent', requireApiKey, async (req, res, next) => {
   const { permanentlyDeleteTenant } = await import('../controllers/adminController');
   return permanentlyDeleteTenant(req as any, res);
 });
 
 // Tenant CSV import route
-router.post('/admin/tenants/import-csv', authenticate, requireAdmin, csvUpload.single('file'), importTenantsFromCSV);
+router.post('/admin/tenants/import-csv', requireApiKey, csvUpload.single('file'), importTenantsFromCSV);
 
-router.post('/admin/payments', authenticate, requireAdmin, validate(recordPaymentSchema), recordPayment);
-router.get('/admin/payments', authenticate, requireAdmin, getPayments);
-router.get('/admin/payments/suggest', authenticate, requireAdmin, suggestPaymentAllocations);
+router.post('/admin/payments', requireApiKey, validate(recordPaymentSchema), recordPayment);
+router.get('/admin/payments', requireApiKey, getPayments);
+router.get('/admin/payments/suggest', requireApiKey, suggestPaymentAllocations);
 
-router.post('/admin/expenses', authenticate, requireAdmin, validate(createExpenseSchema), createExpense);
-router.get('/admin/expenses', authenticate, requireAdmin, getExpenses);
-router.get('/admin/expense-categories', authenticate, requireAdmin, getExpenseCategories);
-router.post('/admin/expense-categories', authenticate, requireAdmin, createExpenseCategory);
+router.post('/admin/expenses', requireApiKey, validate(createExpenseSchema), createExpense);
+router.get('/admin/expenses', requireApiKey, getExpenses);
+router.get('/admin/expense-categories', requireApiKey, getExpenseCategories);
+router.post('/admin/expense-categories', requireApiKey, createExpenseCategory);
 
 // EB Bill routes
-router.post('/admin/eb-bills', authenticate, requireAdmin, createOrUpdateEBBill);
-router.get('/admin/eb-bills', authenticate, requireAdmin, getRoomEBBills);
+router.post('/admin/eb-bills', requireApiKey, createOrUpdateEBBill);
+router.get('/admin/eb-bills', requireApiKey, getRoomEBBills);
 
 // Rent status routes
-router.patch('/admin/rents/:rentId/payment-status', authenticate, requireAdmin, updateRentPaymentStatus);
+router.patch('/admin/rents/:rentId/payment-status', requireApiKey, updateRentPaymentStatus);
 
 // Attachment routes
-router.post('/attachments', authenticate, upload.single('file'), validate(uploadAttachmentSchema), uploadAttachment);
-router.get('/attachments/:id', authenticate, getAttachmentInfo);
-router.get('/attachments/:id/download', authenticate, downloadAttachment);
-router.delete('/attachments/:id', authenticate, deleteAttachment);
-router.get('/me/attachments', authenticate, getMyAttachments);
+router.post('/attachments', requireApiKey, upload.single('file'), validate(uploadAttachmentSchema), uploadAttachment);
+router.get('/attachments/:id', requireApiKey, getAttachmentInfo);
+router.get('/attachments/:id/download', requireApiKey, downloadAttachment);
+router.delete('/attachments/:id', requireApiKey, deleteAttachment);
+router.get('/me/attachments', requireApiKey, getMyAttachments);
 
 export default router;

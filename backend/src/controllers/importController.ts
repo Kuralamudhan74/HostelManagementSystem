@@ -309,7 +309,7 @@ export const importTenantsFromCSV = async (req: AuthRequest, res: Response): Pro
         await newUser.save();
 
         // Log action
-        await logAction(req.user!, 'User', newUser._id, 'create', null, {
+        await logAction(req.user, 'User', newUser._id, 'create', null, {
           tenantId: newUser.tenantId,
           role: 'tenant',
           source: 'CSV Import'

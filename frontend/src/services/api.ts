@@ -11,13 +11,19 @@ class ApiClient {
       timeout: 10000,
       headers: {
         'Content-Type': 'application/json',
+        'x-api-key': import.meta.env.VITE_API_KEY || '', // API key for authentication
       },
-      withCredentials: true, // Enable sending/receiving cookies
+      withCredentials: true, // Keep for potential future use and CORS
     });
 
-    // Request interceptor - cookies are sent automatically, no need to add headers
+    // Request interceptor - add API key to all requests
     this.client.interceptors.request.use(
       (config) => {
+        // Ensure API key is always present
+        const apiKey = import.meta.env.VITE_API_KEY;
+        if (apiKey) {
+          config.headers['x-api-key'] = apiKey;
+        }
         return config;
       },
       (error) => {
@@ -25,38 +31,20 @@ class ApiClient {
       }
     );
 
-    // Response interceptor to handle token refresh
+    // Response interceptor for error handling
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
-        const originalRequest = error.config;
-
-        // Don't retry if this is the refresh endpoint itself (prevents infinite loop)
-        if (originalRequest.url?.includes('/auth/refresh')) {
+        // Handle 401 errors - redirect to login
+        if (error.response?.status === 401) {
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
           return Promise.reject(error);
         }
 
-        // Handle 401 errors (token expired) - but only retry once
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true;
-
-          try {
-            // Try to refresh token - cookies are sent automatically
-            await this.client.post('/auth/refresh', {});
-
-            // Token refreshed successfully, retry the original request
-            return this.client(originalRequest);
-          } catch (refreshError) {
-            // Refresh failed, redirect to login
-            if (window.location.pathname !== '/login') {
-              window.location.href = '/login';
-            }
-            return Promise.reject(refreshError);
-          }
-        }
-
-        // Show error toast for non-401 errors
-        if (error.response?.status && error.response.status !== 401 && error.response.status !== 403) {
+        // Show error toast for other errors
+        if (error.response?.status && error.response.status !== 403) {
           const message = error.response?.data?.message || 'An error occurred';
           toast.error(message);
         }
