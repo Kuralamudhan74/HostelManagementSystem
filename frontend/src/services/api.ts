@@ -37,12 +37,7 @@ class ApiClient {
 
           try {
             // Try to refresh token - cookies are sent automatically
-            await axios.post('/api/auth/refresh', {}, {
-              withCredentials: true, // Important: send cookies with refresh request
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            });
+            await this.client.post('/auth/refresh', {});
 
             // Token refreshed successfully, retry the original request
             return this.client(originalRequest);
