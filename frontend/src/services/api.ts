@@ -31,6 +31,11 @@ class ApiClient {
       async (error) => {
         const originalRequest = error.config;
 
+        // Don't retry if this is the refresh endpoint itself (prevents infinite loop)
+        if (originalRequest.url?.includes('/auth/refresh')) {
+          return Promise.reject(error);
+        }
+
         // Handle 401 errors (token expired) - but only retry once
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
