@@ -27,14 +27,33 @@ export const createAuditLog = async (data: AuditLogData): Promise<IAuditLog> => 
 };
 
 // Helper function to create audit log from user context
+// If user is not provided, logs as "system" (for API key authentication)
 export const logAction = async (
-  user: IUser,
+  user: IUser | null | undefined,
   tableName: string,
   recordId: string,
   actionType: 'create' | 'update' | 'delete',
   beforeData?: any,
   afterData?: any
-): Promise<IAuditLog> => {
+): Promise<IAuditLog | null> => {
+  // If no user is provided (API key auth), use system identifier
+  if (!user) {
+    try {
+      return createAuditLog({
+        actorId: 'system',
+        actorRole: 'admin',
+        tableName,
+        recordId,
+        actionType,
+        beforeJson: beforeData,
+        afterJson: afterData
+      });
+    } catch (error) {
+      console.error('Failed to create audit log:', error);
+      return null;
+    }
+  }
+
   return createAuditLog({
     actorId: user._id,
     actorRole: user.role,
