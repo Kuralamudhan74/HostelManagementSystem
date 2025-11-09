@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Building2, ArrowLeft, Plus, Users, CheckCircle, Search, Trash2, Zap, AirVent, Bath } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
@@ -188,33 +188,20 @@ const RoomsPage: React.FC = () => {
     setIsDeleteRoomModalOpen(true);
   };
 
-  const handleDeleteRoom = async () => {
-    if (!selectedRoom) return;
-    
-    try {
-      const response = await fetch(`/api/admin/rooms/${selectedRoom.id || selectedRoom._id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        toast.error(errorData.message || 'Failed to delete room');
-        return;
-      }
-      
-      toast.success('Room deleted successfully');
+  // Delete room mutation
+  const deleteRoomMutation = useMutation({
+    mutationFn: (roomId: string) => apiClient.deleteRoom(roomId),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Room deleted successfully');
       setIsDeleteRoomModalOpen(false);
       setSelectedRoom(null);
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
-    } catch (error: any) {
-      console.error('Delete room error:', error);
-      toast.error('Failed to delete room');
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: ['hostels'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to delete room');
+    },
+  });
 
   const handleEBBillClick = (room: any) => {
     setSelectedRoom(room);
@@ -888,15 +875,21 @@ const RoomsPage: React.FC = () => {
                 setIsDeleteRoomModalOpen(false);
                 setSelectedRoom(null);
               }}
+              disabled={deleteRoomMutation.isPending}
             >
               Cancel
             </Button>
             <Button
-              onClick={handleDeleteRoom}
+              onClick={() => {
+                if (selectedRoom) {
+                  deleteRoomMutation.mutate(selectedRoom._id || selectedRoom.id);
+                }
+              }}
               variant="primary"
               className="bg-red-600 hover:bg-red-700"
+              disabled={deleteRoomMutation.isPending}
             >
-              Delete Room
+              {deleteRoomMutation.isPending ? 'Deleting...' : 'Delete Room'}
             </Button>
           </div>
         </div>

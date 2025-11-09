@@ -124,6 +124,16 @@ class ApiClient {
     return response.data;
   }
 
+  async deleteRoom(roomId: string): Promise<{ message: string }> {
+    const response = await this.client.delete(`/admin/rooms/${roomId}`);
+    return response.data;
+  }
+
+  async endTenancy(tenancyId: string): Promise<{ message: string; tenancy: any }> {
+    const response = await this.client.patch(`/admin/tenancies/${tenancyId}/end`);
+    return response.data;
+  }
+
   async getTenants(params?: {
     hostelId?: string;
     room?: string;

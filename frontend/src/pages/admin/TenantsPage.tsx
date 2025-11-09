@@ -46,6 +46,7 @@ const TenantsPage: React.FC = () => {
   const [addTenantFormData, setAddTenantFormData] = useState<any>({
     firstName: '',
     lastName: '',
+    email: '',
     phone: '',
     tenantId: '',
     fatherName: '',
@@ -62,6 +63,12 @@ const TenantsPage: React.FC = () => {
     emergencyContactName: '',
     emergencyContactNumber: '',
     emergencyContactRelation: '',
+    roomNumber: '',
+    roomCategory: '',
+    accommodationType: '',
+    withFood: false,
+    checkInDate: '',
+    aadharProofUrl: '',
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importResults, setImportResults] = useState<any>(null);
@@ -110,19 +117,9 @@ const TenantsPage: React.FC = () => {
 
   // Unassign tenant mutation
   const unassignTenantMutation = useMutation({
-    mutationFn: async (tenancyId: string) => {
-      // End the tenancy by setting isActive to false
-      // Note: You'll need to add this endpoint to the backend
-      return await fetch(`/api/admin/tenancies/${tenancyId}/end`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      }).then(res => res.json());
-    },
-    onSuccess: () => {
-      toast.success('Tenant unassigned successfully');
+    mutationFn: (tenancyId: string) => apiClient.endTenancy(tenancyId),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Tenant unassigned successfully');
       setIsUnassignModalOpen(false);
       setSelectedTenancy(null);
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
@@ -950,7 +947,11 @@ const TenantsPage: React.FC = () => {
                       size="sm"
                       className="flex-1 min-w-[120px] bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
                       onClick={() => {
-                        setSelectedTenant(tenancy.tenantId);
+                        // tenancy.tenantId is a populated object, extract the ID and full object
+                        const tenantId = typeof tenancy.tenantId === 'object'
+                          ? (tenancy.tenantId._id || tenancy.tenantId.id)
+                          : tenancy.tenantId;
+                        setSelectedTenant({ ...tenancy.tenantId, _id: tenantId });
                         setIsDeleteModalOpen(true);
                       }}
                     >
@@ -1910,6 +1911,7 @@ const TenantsPage: React.FC = () => {
           setAddTenantFormData({
             firstName: '',
             lastName: '',
+            email: '',
             phone: '',
             tenantId: '',
             fatherName: '',
@@ -1926,6 +1928,12 @@ const TenantsPage: React.FC = () => {
             emergencyContactName: '',
             emergencyContactNumber: '',
             emergencyContactRelation: '',
+            roomNumber: '',
+            roomCategory: '',
+            accommodationType: '',
+            withFood: false,
+            checkInDate: '',
+            aadharProofUrl: '',
           });
         }}
         title="Add New Tenant"
@@ -1948,14 +1956,13 @@ const TenantsPage: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
                 <input
                   type="text"
                   name="lastName"
                   value={addTenantFormData.lastName}
                   onChange={handleAddTenantInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                  required
                 />
               </div>
               <div>
@@ -2146,6 +2153,95 @@ const TenantsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Room & Accommodation Details (Optional) */}
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Room & Accommodation Details (Optional)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={addTenantFormData.email}
+                  onChange={handleAddTenantInputChange}
+                  placeholder="tenant@example.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Room Number</label>
+                <input
+                  type="text"
+                  name="roomNumber"
+                  value={addTenantFormData.roomNumber}
+                  onChange={handleAddTenantInputChange}
+                  placeholder="e.g., 208, 108-209"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Room Category</label>
+                <select
+                  name="roomCategory"
+                  value={addTenantFormData.roomCategory}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select category</option>
+                  <option value="AC">AC</option>
+                  <option value="Non-AC">Non-AC</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Accommodation Type</label>
+                <select
+                  name="accommodationType"
+                  value={addTenantFormData.accommodationType}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select type</option>
+                  <option value="Single">Single</option>
+                  <option value="Two">Two</option>
+                  <option value="Three">Three</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Check-in Date</label>
+                <input
+                  type="date"
+                  name="checkInDate"
+                  value={addTenantFormData.checkInDate}
+                  onChange={handleAddTenantInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Aadhar Proof URL</label>
+                <input
+                  type="url"
+                  name="aadharProofUrl"
+                  value={addTenantFormData.aadharProofUrl}
+                  onChange={handleAddTenantInputChange}
+                  placeholder="Google Drive link"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="withFood"
+                    checked={addTenantFormData.withFood}
+                    onChange={(e) => setAddTenantFormData({ ...addTenantFormData, withFood: e.target.checked })}
+                    className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm font-medium text-gray-700">With Food</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
             <Button
               type="button"
@@ -2155,6 +2251,7 @@ const TenantsPage: React.FC = () => {
                 setAddTenantFormData({
                   firstName: '',
                   lastName: '',
+                  email: '',
                   phone: '',
                   tenantId: '',
                   fatherName: '',
@@ -2171,6 +2268,12 @@ const TenantsPage: React.FC = () => {
                   emergencyContactName: '',
                   emergencyContactNumber: '',
                   emergencyContactRelation: '',
+                  roomNumber: '',
+                  roomCategory: '',
+                  accommodationType: '',
+                  withFood: false,
+                  checkInDate: '',
+                  aadharProofUrl: '',
                 });
               }}
               disabled={createTenantMutation.isPending}

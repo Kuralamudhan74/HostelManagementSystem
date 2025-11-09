@@ -26,6 +26,13 @@ export interface IUser extends Document {
   emergencyContactName?: string;
   emergencyContactNumber?: string;
   emergencyContactRelation?: string;
+  // New fields from Google Form
+  roomNumber?: string; // Room assignment from form (not FK, just reference)
+  roomCategory?: string; // AC/Non-AC
+  accommodationType?: string; // Single/Two/Three
+  withFood?: boolean; // Food preference
+  checkInDate?: Date; // Check-in date
+  aadharProofUrl?: string; // Google Drive link to Aadhar proof
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,7 +42,7 @@ const userSchema = new Schema<IUser>({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
+  lastName: { type: String }, // Optional - not required for tenants
   phone: { type: String },
   role: { type: String, enum: ['admin', 'tenant'], required: true },
   isActive: { type: Boolean, default: true },
@@ -53,7 +60,14 @@ const userSchema = new Schema<IUser>({
   expectedDurationStay: { type: String },
   emergencyContactName: { type: String },
   emergencyContactNumber: { type: String },
-  emergencyContactRelation: { type: String }
+  emergencyContactRelation: { type: String },
+  // New fields from Google Form
+  roomNumber: { type: String },
+  roomCategory: { type: String },
+  accommodationType: { type: String },
+  withFood: { type: Boolean },
+  checkInDate: { type: Date },
+  aadharProofUrl: { type: String }
 }, {
   timestamps: true
 });
@@ -366,8 +380,8 @@ const roomInventorySchema = new Schema<IRoomInventory>({
 // Audit Log Schema
 export interface IAuditLog extends Document {
   _id: string;
-  actorId: mongoose.Types.ObjectId;
-  actorRole: 'admin' | 'tenant';
+  actorId?: mongoose.Types.ObjectId | string; // Can be ObjectId or "system" for automated actions
+  actorRole?: 'admin' | 'tenant' | 'system';
   tableName: string;
   recordId: string;
   actionType: 'create' | 'update' | 'delete';
@@ -377,8 +391,8 @@ export interface IAuditLog extends Document {
 }
 
 const auditLogSchema = new Schema<IAuditLog>({
-  actorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  actorRole: { type: String, enum: ['admin', 'tenant'], required: true },
+  actorId: { type: Schema.Types.Mixed, ref: 'User' }, // Mixed type to allow ObjectId or string "system"
+  actorRole: { type: String, enum: ['admin', 'tenant', 'system'] },
   tableName: { type: String, required: true },
   recordId: { type: String, required: true },
   actionType: { type: String, enum: ['create', 'update', 'delete'], required: true },

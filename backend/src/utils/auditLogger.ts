@@ -2,8 +2,8 @@ import { AuditLog, IAuditLog } from '../models';
 import { IUser } from '../models';
 
 export interface AuditLogData {
-  actorId: string;
-  actorRole: 'admin' | 'tenant';
+  actorId?: string | 'system'; // Optional, can be user ID or "system"
+  actorRole?: 'admin' | 'tenant' | 'system';
   tableName: string;
   recordId: string;
   actionType: 'create' | 'update' | 'delete';

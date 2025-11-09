@@ -6,6 +6,29 @@ export interface User {
   lastName: string;
   phone?: string;
   role: 'admin' | 'tenant';
+  tenantId?: string;
+  fatherName?: string;
+  dateOfBirth?: string;
+  whatsappNumber?: string;
+  permanentAddress?: string;
+  city?: string;
+  state?: string;
+  aadharNumber?: string;
+  occupation?: string;
+  collegeCompanyName?: string;
+  officeAddress?: string;
+  expectedDurationStay?: string;
+  emergencyContactName?: string;
+  emergencyContactNumber?: string;
+  emergencyContactRelation?: string;
+  // New fields from Google Form
+  roomNumber?: string;
+  roomCategory?: string;
+  accommodationType?: string;
+  withFood?: boolean;
+  checkInDate?: string;
+  aadharProofUrl?: string;
+  isActive?: boolean;
   createdAt: string;
 }
 

@@ -7,22 +7,28 @@ import csv from 'csv-parser';
 import { Readable } from 'stream';
 
 // Field mapping from Google Forms to User model
-// Based on actual form columns
+// Based on actual form columns from "Shree Men's Hostel & PG (Responses)"
 const FIELD_MAPPING: Record<string, string> = {
+  'Email address': 'email', // Email from the form
   'Name': 'fullName', // We'll split this into firstName and lastName
   'Father Name': 'fatherName',
-  'Date of Birth': 'dateOfBirth',
+  'Date Of Birth': 'dateOfBirth',
   'Mobile Number': 'phone',
   'WhatsApp Number': 'whatsappNumber',
-  'Permanent Address (native)': 'permanentAddress',
-  'City & State': 'cityState', // We'll split this into city and state
   'Aadhar Number': 'aadharNumber',
-  'Occupation': 'occupation',
+  'Permanent Address (native)': 'permanentAddress',
   'Name of College/Company/Institute (if you are searching for job/studying, pls put studying)': 'collegeCompanyName',
-  'Office/College/Institute Address (city)': 'officeAddress',
+  'Room Number': 'roomNumber', // Room assignment from form
+  'Room Category': 'roomCategory', // AC/Non-AC
+  'Accommodation Type': 'accommodationType', // Single/Two/Three
+  'Food': 'foodPreference', // Yes/No
+  'Emergency Contact with Name': 'emergencyContact', // Format: "Name - Phone"
+  'Check in Date': 'checkInDate',
+  'Upload your proof ID (Aadhar)': 'aadharProofUrl', // Google Drive link
+  'Occupation': 'occupation',
   'Expected Duration of Stay (for our reference)': 'expectedDurationStay',
-  'Emergency Contact': 'emergencyContactNumber', // Now separate phone field
-  'Emergency Contact Name': 'emergencyContactName' // Now separate name field
+  'Office/College/Institute Address (city)': 'officeAddress',
+  'City & State': 'cityState' // We'll split this into city and state
 };
 
 interface ImportRow {
@@ -135,7 +141,7 @@ const mapRowToUser = (row: ImportRow): any => {
       const cleanedValue = cleanValue(value);
 
       // Special handling for different field types
-      if (mappedField === 'dateOfBirth') {
+      if (mappedField === 'dateOfBirth' || mappedField === 'checkInDate') {
         const date = parseDate(cleanedValue);
         if (date) {
           userData[mappedField] = date;
@@ -147,24 +153,66 @@ const mapRowToUser = (row: ImportRow): any => {
         // Only set lastName if there are multiple parts, otherwise leave it empty
         userData.lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
       } else if (mappedField === 'cityState') {
-        // Split "City & State" or "City TN" into city and state
-        const parts = cleanedValue.split(/\s+/);
+        // Split "City & State" or "City, State" into city and state
+        // Examples: "Salem, Tamil Nadu" or "Aklera, Rajasthan"
+        const parts = cleanedValue.split(/[,&]\s*/);
         if (parts.length >= 2) {
-          // Last part is state, rest is city
-          userData.state = parts[parts.length - 1];
-          userData.city = parts.slice(0, -1).join(' ');
+          userData.city = parts[0].trim();
+          userData.state = parts[parts.length - 1].trim();
         } else {
-          userData.city = cleanedValue;
-          userData.state = '';
+          // Try space-separated format: "Salem TN"
+          const spaceParts = cleanedValue.split(/\s+/);
+          if (spaceParts.length >= 2) {
+            userData.state = spaceParts[spaceParts.length - 1];
+            userData.city = spaceParts.slice(0, -1).join(' ');
+          } else {
+            userData.city = cleanedValue;
+            userData.state = '';
+          }
         }
+      } else if (mappedField === 'emergencyContact') {
+        // Parse "Name - Phone" or "Name-Phone" or "Phone-Name" format
+        // Examples: "Saravanan S - 9486763154, Mageswari S - 9786980655"
+        const contacts = cleanedValue.split(',');
+        const firstContact = contacts[0].trim();
+        const parts = firstContact.split(/\s*[-–]\s*/);
+
+        if (parts.length >= 2) {
+          // Check which part is the phone number
+          const phonePattern = /[6-9]\d{9}/;
+          if (phonePattern.test(parts[0].replace(/\s+/g, ''))) {
+            // Phone comes first
+            userData.emergencyContactNumber = parts[0].trim();
+            userData.emergencyContactName = parts[1].trim();
+          } else {
+            // Name comes first
+            userData.emergencyContactName = parts[0].trim();
+            userData.emergencyContactNumber = parts[1].trim();
+          }
+        } else {
+          // If no separator, try to extract just the phone number
+          const phoneMatch = cleanedValue.match(/[6-9]\d{9}/);
+          if (phoneMatch) {
+            userData.emergencyContactNumber = phoneMatch[0];
+            userData.emergencyContactName = cleanedValue.replace(phoneMatch[0], '').trim();
+          } else {
+            userData.emergencyContactName = cleanedValue;
+          }
+        }
+      } else if (mappedField === 'foodPreference') {
+        // Convert "Yes"/"No" to boolean
+        userData.withFood = cleanedValue.toLowerCase() === 'yes';
+      } else if (mappedField === 'aadharNumber') {
+        // Clean Aadhar number by removing spaces
+        userData.aadharNumber = cleanedValue.replace(/\s+/g, '');
       } else {
         userData[mappedField] = cleanedValue;
       }
     }
   }
 
-  // Note: Email and password are not generated for tenants
-  // They are not needed since tenants don't log in via the system
+  // Note: Email is now taken from the form if provided
+  // If not provided, we'll generate one later
 
   // Set default emergency contact relation if not provided
   if (!userData.emergencyContactRelation && userData.emergencyContactName) {
@@ -189,11 +237,12 @@ const validateTenantData = (data: any, rowNum: number): { valid: boolean; errors
   if (!data.aadharNumber) errors.push('Aadhar number is required');
   if (!data.occupation) errors.push('Occupation is required');
   if (!data.collegeCompanyName) errors.push('College/Company/Institute name is required');
-  if (!data.emergencyContactName) errors.push('Emergency contact is required');
+  // Note: lastName and emergencyContactName are now optional
 
-  // Email and password are not required for tenants (no login functionality)
-
-  // Expected duration is optional (not checked)
+  // Email validation (if provided in form)
+  if (data.email && !isValidEmail(data.email)) {
+    errors.push('Invalid email format');
+  }
 
   // Format validations
   if (data.phone && !isValidPhone(data.phone)) {
@@ -291,9 +340,25 @@ export const importTenantsFromCSV = async (req: AuthRequest, res: Response): Pro
         userData.tenantId = currentTenantId.toString();
         currentTenantId++;
 
-        // Generate a placeholder email (required by model but not used for login)
-        // Format: tenant{id}@hostel.local (not displayed or shared)
-        userData.email = `tenant${userData.tenantId}@hostel.local`;
+        // Use email from form if provided, otherwise generate a placeholder
+        if (!userData.email || userData.email.trim() === '') {
+          // Generate a placeholder email (required by model but not used for login)
+          // Format: tenant{id}@hostel.local (not displayed or shared)
+          userData.email = `tenant${userData.tenantId}@hostel.local`;
+        }
+
+        // Check for duplicate email
+        const existingUserByEmail = await User.findOne({ email: userData.email });
+        if (existingUserByEmail) {
+          console.log(`Skipping duplicate email: ${userData.email}`);
+          importResult.failed++;
+          importResult.errors.push({
+            row: rowNum,
+            name: `${userData.firstName} ${userData.lastName}`,
+            reason: 'Email already exists in system'
+          });
+          continue;
+        }
 
         // Generate a random password (required by model but not used for login)
         // Tenants don't have login access, so this is just a placeholder
