@@ -9,7 +9,6 @@ import {
   changePassword,
   loginSchema,
   registerSchema,
-  refreshTokenSchema,
   changePasswordSchema
 } from '../controllers/authController';
 import { 
@@ -72,8 +71,8 @@ const csvUpload = multer({
 // Authentication routes
 router.post('/auth/login', validate(loginSchema), login);
 router.post('/auth/register', authenticate, requireAdmin, validate(registerSchema), register);
-router.post('/auth/refresh', validate(refreshTokenSchema), refreshToken);
-router.post('/auth/logout', authenticate, logout);
+router.post('/auth/refresh', refreshToken);
+router.post('/auth/logout', logout);
 
 // User profile routes
 router.get('/me', authenticate, getProfile);

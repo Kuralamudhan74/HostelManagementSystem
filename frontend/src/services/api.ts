@@ -12,12 +12,24 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
-      withCredentials: true, // Enable sending/receiving cookies
     });
 
-    // Request interceptor - cookies are sent automatically, no need to add headers
+    // Request interceptor - add user ID from localStorage to headers
     this.client.interceptors.request.use(
       (config) => {
+        // Get user from localStorage
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            if (user && user.id) {
+              // Add user ID to custom header
+              config.headers['x-user-id'] = user.id;
+            }
+          } catch (e) {
+            console.error('Failed to parse user from localStorage:', e);
+          }
+        }
         return config;
       },
       (error) => {
@@ -25,34 +37,20 @@ class ApiClient {
       }
     );
 
-    // Response interceptor to handle token refresh
+    // Response interceptor to handle errors
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
-        const originalRequest = error.config;
+        // Handle 401 errors - redirect to login
+        if (error.response?.status === 401) {
+          // Clear localStorage
+          localStorage.removeItem('user');
 
-        // Don't retry if this is the refresh endpoint itself (prevents infinite loop)
-        if (originalRequest.url?.includes('/auth/refresh')) {
-          return Promise.reject(error);
-        }
-
-        // Handle 401 errors (token expired) - but only retry once
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true;
-
-          try {
-            // Try to refresh token - cookies are sent automatically
-            await this.client.post('/auth/refresh', {});
-
-            // Token refreshed successfully, retry the original request
-            return this.client(originalRequest);
-          } catch (refreshError) {
-            // Refresh failed, redirect to login
-            if (window.location.pathname !== '/login') {
-              window.location.href = '/login';
-            }
-            return Promise.reject(refreshError);
+          // Redirect to login page
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
           }
+          return Promise.reject(error);
         }
 
         // Show error toast for non-401 errors
@@ -77,14 +75,10 @@ class ApiClient {
     return response.data;
   }
 
-  async refreshToken(): Promise<{ message: string; user: any }> {
-    const response = await this.client.post('/auth/refresh', {});
-    return response.data;
-  }
-
   async logout(): Promise<void> {
     await this.client.post('/auth/logout');
-    // Cookies are cleared by the server
+    // Clear localStorage
+    localStorage.removeItem('user');
   }
 
   // User profile endpoints

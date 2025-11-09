@@ -1,4 +1,3 @@
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Request, Response, NextFunction } from 'express';
 import { User, IUser } from '../models';
@@ -6,52 +5,6 @@ import { User, IUser } from '../models';
 export interface AuthRequest extends Request {
   user?: IUser;
 }
-
-export interface JWTPayload {
-  userId: string;
-  email: string;
-  role: string;
-}
-
-// Generate JWT token
-export const generateToken = (payload: JWTPayload): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET environment variable is required');
-  }
-  return jwt.sign(payload, secret, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '15m'
-  } as jwt.SignOptions);
-};
-
-// Generate refresh token
-export const generateRefreshToken = (payload: JWTPayload): string => {
-  const secret = process.env.JWT_REFRESH_SECRET;
-  if (!secret) {
-    throw new Error('JWT_REFRESH_SECRET environment variable is required');
-  }
-  return jwt.sign(payload, secret, {
-    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
-  } as jwt.SignOptions);
-};
-
-// Verify JWT token
-export const verifyToken = (token: string): JWTPayload => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET environment variable is required');
-  }
-  return jwt.verify(token, secret) as JWTPayload;
-};
-
-// Verify refresh token
-export const verifyRefreshToken = (token: string): JWTPayload => {
-  const secret = process.env.JWT_REFRESH_SECRET;
-  if (!secret) {
-    throw new Error('JWT_REFRESH_SECRET environment variable is required');
-  }
-  return jwt.verify(token, secret) as JWTPayload;
-};
 
 // Hash password
 export const hashPassword = async (password: string): Promise<string> => {
@@ -64,39 +17,27 @@ export const comparePassword = async (password: string, hashedPassword: string):
   return bcrypt.compare(password, hashedPassword);
 };
 
-// Authentication middleware - supports both cookies (preferred) and Authorization header (fallback)
+// Authentication middleware - NO JWT validation, just get userId from header
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    // Try to get token from cookie first (preferred method)
-    let token = req.cookies?.accessToken;
+    // Get userId from custom header (set by frontend from localStorage)
+    const userId = req.headers['x-user-id'] as string;
 
-    // Fallback to Authorization header for backwards compatibility
-    if (!token) {
-      const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.substring(7);
-      }
-    }
-
-    if (!token) {
-      console.error('No access token found in cookies or headers');
-      res.status(401).json({ message: 'Access token required' });
+    if (!userId) {
+      console.error('No user ID found in headers');
+      res.status(401).json({ message: 'User ID required' });
       return;
     }
 
-    const decoded = verifyToken(token);
-
-    console.log('Decoded token:', { userId: decoded.userId, email: decoded.email, role: decoded.role });
-
-    const user = await User.findById(decoded.userId).select('-password');
+    const user = await User.findById(userId).select('-password');
     if (!user) {
-      console.error('User not found:', decoded.userId);
+      console.error('User not found:', userId);
       res.status(401).json({ message: 'User not found' });
       return;
     }
 
     if (!user.isActive) {
-      console.error('User is not active:', decoded.userId);
+      console.error('User is not active:', userId);
       res.status(401).json({ message: 'User account is inactive' });
       return;
     }
@@ -106,7 +47,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     next();
   } catch (error: any) {
     console.error('Authentication error:', error.message);
-    res.status(401).json({ message: error.message || 'Invalid token' });
+    res.status(401).json({ message: error.message || 'Invalid user ID' });
   }
 };
 

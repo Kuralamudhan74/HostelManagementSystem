@@ -1,13 +1,10 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { User } from '../models';
-import { 
-  generateToken, 
-  generateRefreshToken, 
-  verifyRefreshToken, 
-  hashPassword, 
+import {
+  hashPassword,
   comparePassword,
-  AuthRequest 
+  AuthRequest
 } from '../middleware/auth';
 import { logAction } from '../utils/auditLogger';
 
@@ -30,11 +27,7 @@ const registerSchema = z.object({
   })
 });
 
-const refreshTokenSchema = z.object({
-  body: z.object({
-    refreshToken: z.string().optional()
-  })
-});
+// Refresh token schema removed - no longer needed
 
 const changePasswordSchema = z.object({
   body: z.object({
@@ -82,16 +75,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Generate tokens
-    const tokenPayload = {
-      userId: user._id,
-      email: user.email,
-      role: user.role
-    };
-
-    const accessToken = generateToken(tokenPayload);
-    const refreshToken = generateRefreshToken(tokenPayload);
-
     // Log login action (non-blocking - don't fail login if audit log fails)
     try {
       await logAction(user, 'User', user._id, 'update', null, { lastLogin: new Date() });
@@ -100,26 +83,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       // Continue with login even if audit logging fails
     }
 
-    // Set httpOnly cookies for tokens
-    const isProduction = process.env.NODE_ENV === 'production';
-    const cookieOptions = {
-      httpOnly: true, // Prevents JavaScript access (XSS protection)
-      secure: isProduction, // Only send over HTTPS in production
-      sameSite: isProduction ? 'none' as const : 'lax' as const, // 'none' allows cross-origin cookies in production
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (matches refresh token)
-      path: '/', // Available on all routes
-    };
-
-    // Set accessToken cookie with shorter expiry
-    res.cookie('accessToken', accessToken, {
-      ...cookieOptions,
-      maxAge: 15 * 60 * 1000, // 15 minutes
-    });
-
-    // Set refreshToken cookie
-    res.cookie('refreshToken', refreshToken, cookieOptions);
-
-    // Return user data only (no tokens in response body)
+    // Return user data (frontend will store in localStorage)
     res.json({
       message: 'Login successful',
       user: {
@@ -191,67 +155,16 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
   }
 };
 
-// Refresh token controller
+// Refresh token controller - No longer needed, but keeping for API compatibility
 export const refreshToken = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Try to get refresh token from cookie first, then fallback to body
-    let refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
-
-    if (!refreshToken) {
-      res.status(401).json({ message: 'Refresh token required' });
-      return;
-    }
-
-    // Verify refresh token
-    const decoded = verifyRefreshToken(refreshToken);
-
-    // Find user
-    const user = await User.findById(decoded.userId);
-    if (!user || !user.isActive) {
-      res.status(401).json({ message: 'Invalid refresh token' });
-      return;
-    }
-
-    // Generate new tokens
-    const tokenPayload = {
-      userId: user._id,
-      email: user.email,
-      role: user.role
-    };
-
-    const newAccessToken = generateToken(tokenPayload);
-    const newRefreshToken = generateRefreshToken(tokenPayload);
-
-    // Set new cookies
-    const isProduction = process.env.NODE_ENV === 'production';
-    const cookieOptions = {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' as const : 'lax' as const, // 'none' allows cross-origin cookies in production
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/',
-    };
-
-    res.cookie('accessToken', newAccessToken, {
-      ...cookieOptions,
-      maxAge: 15 * 60 * 1000, // 15 minutes
-    });
-
-    res.cookie('refreshToken', newRefreshToken, cookieOptions);
-
+    // No refresh token logic needed
     res.json({
-      message: 'Token refreshed successfully',
-      user: {
-        id: user._id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role
-      }
+      message: 'Token refresh not required in current setup'
     });
   } catch (error) {
     console.error('Refresh token error:', error);
-    res.status(401).json({ message: 'Invalid refresh token' });
+    res.status(401).json({ message: 'Token refresh not required' });
   }
 };
 
@@ -340,13 +253,9 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-// Logout controller
+// Logout controller - Frontend handles clearing localStorage
 export const logout = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // Clear authentication cookies
-    res.clearCookie('accessToken', { path: '/' });
-    res.clearCookie('refreshToken', { path: '/' });
-
     res.json({ message: 'Logout successful' });
   } catch (error) {
     console.error('Logout error:', error);
@@ -412,4 +321,4 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-export { loginSchema, registerSchema, refreshTokenSchema, changePasswordSchema };
+export { loginSchema, registerSchema, changePasswordSchema };

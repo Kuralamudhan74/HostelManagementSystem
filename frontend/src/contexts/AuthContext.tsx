@@ -27,44 +27,36 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    const initAuth = async () => {
+    // Initialize auth from localStorage
+    const initAuth = () => {
       try {
-        // Try to get user profile - cookies will be sent automatically
-        const response = await apiClient.getProfile();
-        setUser(response.user);
-        setRetryCount(0); // Reset retry count on success
-      } catch (error: any) {
-        console.error('Failed to get profile:', error);
-
-        // Only retry on network errors, not authentication errors
-        if (error?.response?.status !== 401 && error?.response?.status !== 403 && retryCount < 2) {
-          // Network error - retry after a short delay
-          console.log(`Retrying authentication (attempt ${retryCount + 1})...`);
-          setTimeout(() => {
-            setRetryCount(prev => prev + 1);
-          }, 1000);
-          return; // Don't set isLoading to false yet
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const userData = JSON.parse(userStr);
+          setUser(userData);
         }
-
-        // Authentication failed or max retries reached - user is not logged in
-        setUser(null);
+      } catch (error) {
+        console.error('Failed to parse user from localStorage:', error);
+        localStorage.removeItem('user');
       } finally {
         setIsLoading(false);
       }
     };
 
     initAuth();
-  }, [retryCount]); // Re-run when retryCount changes
+  }, []);
 
   const login = async (email: string, password: string) => {
     try {
-      // Login endpoint now returns user in nested object
+      // Login endpoint returns user in nested object
       const response = await apiClient.login({ email, password });
 
-      // Set user from the nested user object in response
+      // Store user in localStorage
+      localStorage.setItem('user', JSON.stringify(response.user));
+
+      // Set user state
       setUser(response.user);
     } catch (error) {
       throw error;
@@ -77,7 +69,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Always clear user state on logout
+      // Clear localStorage and user state
+      localStorage.removeItem('user');
       setUser(null);
     }
   };
@@ -85,6 +78,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const updateProfile = async (data: { firstName: string; lastName: string; phone?: string }) => {
     try {
       const response = await apiClient.updateProfile(data);
+
+      // Update localStorage with new user data
+      localStorage.setItem('user', JSON.stringify(response.user));
+
+      // Update state
       setUser(response.user);
     } catch (error) {
       throw error;
