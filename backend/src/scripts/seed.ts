@@ -1,6 +1,23 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { User } from '../models';
+import {
+  User,
+  Owner,
+  Hostel,
+  Room,
+  RoomEBBill,
+  Tenancy,
+  MonthlyRent,
+  Bill,
+  Payment,
+  PaymentAllocation,
+  ExpenseCategory,
+  Expense,
+  InventoryItem,
+  RoomInventory,
+  AuditLog,
+  Attachment
+} from '../models';
 import { hashPassword } from '../middleware/auth';
 
 // Load environment variables
@@ -21,9 +38,58 @@ const seedData = async () => {
     await mongoose.connect(mongoURI);
     console.log('✅ Connected to MongoDB');
 
-    // Clear existing users only
+    // ⚠️  CLEAR ALL EXISTING DATA - This will wipe the entire database!
+    console.log('\n🗑️  Clearing all existing data from database...');
+
+    await PaymentAllocation.deleteMany({});
+    console.log('   ✓ Cleared payment allocations');
+
+    await Payment.deleteMany({});
+    console.log('   ✓ Cleared payments');
+
+    await Bill.deleteMany({});
+    console.log('   ✓ Cleared bills');
+
+    await MonthlyRent.deleteMany({});
+    console.log('   ✓ Cleared monthly rents');
+
+    await RoomEBBill.deleteMany({});
+    console.log('   ✓ Cleared room EB bills');
+
+    await Tenancy.deleteMany({});
+    console.log('   ✓ Cleared tenancies');
+
+    await RoomInventory.deleteMany({});
+    console.log('   ✓ Cleared room inventory');
+
+    await InventoryItem.deleteMany({});
+    console.log('   ✓ Cleared inventory items');
+
+    await Room.deleteMany({});
+    console.log('   ✓ Cleared rooms');
+
+    await Hostel.deleteMany({});
+    console.log('   ✓ Cleared hostels');
+
+    await Owner.deleteMany({});
+    console.log('   ✓ Cleared owners');
+
+    await Expense.deleteMany({});
+    console.log('   ✓ Cleared expenses');
+
+    await ExpenseCategory.deleteMany({});
+    console.log('   ✓ Cleared expense categories');
+
+    await Attachment.deleteMany({});
+    console.log('   ✓ Cleared attachments');
+
+    await AuditLog.deleteMany({});
+    console.log('   ✓ Cleared audit logs');
+
     await User.deleteMany({});
-    console.log('🗑️  Cleared existing users');
+    console.log('   ✓ Cleared users');
+
+    console.log('✅ All collections cleared successfully!\n');
 
     // Create admin users (for production initial setup)
     const adminPassword = await hashPassword('admin123');
@@ -57,17 +123,23 @@ const seedData = async () => {
     console.log('✅ SEED DATA COMPLETED SUCCESSFULLY!');
     console.log('========================================');
     console.log('');
-    console.log('📧 Admin Credentials:');
+    console.log('🗑️  Database Status:');
+    console.log('   - ALL previous data has been deleted');
+    console.log('   - Database is now clean with only admin credentials');
+    console.log('');
+    console.log('📧 Admin Login Credentials:');
     console.log('   1. Email: admin@hostel.com | Password: admin123');
     console.log('   2. Email: vasu@hostel.com  | Password: vasu123');
     console.log('');
-    console.log('⚠️  IMPORTANT: Change these passwords immediately after first login!');
+    console.log('⚠️  SECURITY WARNING:');
+    console.log('   - Change these passwords immediately after first login!');
+    console.log('   - Never run this script in production environment!');
     console.log('');
-    console.log('💡 You can now login and start adding:');
-    console.log('   - Hostels');
-    console.log('   - Rooms');
-    console.log('   - Tenants');
-    console.log('   - Payments & Expenses');
+    console.log('💡 Next Steps:');
+    console.log('   1. Login with admin credentials');
+    console.log('   2. Add Hostels and Rooms');
+    console.log('   3. Import Tenants via CSV or add manually');
+    console.log('   4. Manage Payments & Expenses');
     console.log('========================================\n');
 
   } catch (error) {
