@@ -36,12 +36,14 @@ const TenantsPage: React.FC = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isImportResultsModalOpen, setIsImportResultsModalOpen] = useState(false);
   const [isAssignRoomModalOpen, setIsAssignRoomModalOpen] = useState(false);
+  const [isEditTenancyModalOpen, setIsEditTenancyModalOpen] = useState(false);
   const [selectedTenancy, setSelectedTenancy] = useState<any>(null);
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [selectedTenantProfile, setSelectedTenantProfile] = useState<any>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [editProfileFormData, setEditProfileFormData] = useState<any>(null);
+  const [editTenancyFormData, setEditTenancyFormData] = useState<any>(null);
   const [isAddTenantModalOpen, setIsAddTenantModalOpen] = useState(false);
   const [addTenantFormData, setAddTenantFormData] = useState<any>({
     firstName: '',
@@ -63,12 +65,6 @@ const TenantsPage: React.FC = () => {
     emergencyContactName: '',
     emergencyContactNumber: '',
     emergencyContactRelation: '',
-    roomNumber: '',
-    roomCategory: '',
-    accommodationType: '',
-    withFood: false,
-    checkInDate: '',
-    aadharProofUrl: '',
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importResults, setImportResults] = useState<any>(null);
@@ -194,6 +190,23 @@ const TenantsPage: React.FC = () => {
     },
   });
 
+  // Update tenancy mutation
+  const updateTenancyMutation = useMutation({
+    mutationFn: ({ tenancyId, data }: { tenancyId: string; data: any }) =>
+      apiClient.updateTenancy(tenancyId, data),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Tenancy details updated successfully');
+      setIsEditTenancyModalOpen(false);
+      setEditTenancyFormData(null);
+      setSelectedTenancy(null);
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update tenancy');
+    },
+  });
+
   // Create tenant mutation
   const createTenantMutation = useMutation({
     mutationFn: (data: any) => apiClient.createTenant(data),
@@ -279,6 +292,33 @@ const TenantsPage: React.FC = () => {
     setEditProfileFormData((prev: any) => ({
       ...prev,
       [name]: value
+    }));
+  };
+
+  const handleEditTenancyClick = (tenancy: any) => {
+    setSelectedTenancy(tenancy);
+    const startDateValue = tenancy.startDate ? new Date(tenancy.startDate).toISOString().split('T')[0] : '';
+    setEditTenancyFormData({
+      roomId: tenancy.roomId?._id || tenancy.roomId?.id || tenancy.roomId || '',
+      tenantShare: tenancy.tenantShare || 0,
+      startDate: startDateValue,
+    });
+    setIsEditTenancyModalOpen(true);
+  };
+
+  const handleUpdateTenancy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenancy) return;
+
+    const tenancyId = selectedTenancy._id || selectedTenancy.id;
+    updateTenancyMutation.mutate({ tenancyId, data: editTenancyFormData });
+  };
+
+  const handleTenancyInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setEditTenancyFormData((prev: any) => ({
+      ...prev,
+      [name]: name === 'tenantShare' ? parseFloat(value) || 0 : value
     }));
   };
 
@@ -769,8 +809,8 @@ const TenantsPage: React.FC = () => {
                       ...paymentStatusInfo,
                       label: 'Partial',
                       status: 'partial',
-                      colorClass: 'text-yellow-700',
-                      bgColorClass: 'bg-yellow-100',
+                      colorClass: 'text-red-700',
+                      bgColorClass: 'bg-red-100',
                       remainingAmount: totalRemainingAmount,
                     };
                   }
@@ -783,24 +823,27 @@ const TenantsPage: React.FC = () => {
               // Determine card border/accent color based on payment status
               // Use a top accent bar for payment status to avoid conflicts with tenant status colors
               let paymentStatusBar = '';
+              let cardBgColor = showPastTenants ? 'bg-gray-50 border border-gray-200' : 'bg-white';
+
               if (!showPastTenants && paymentStatusInfo) {
                 if (paymentStatusInfo.status === 'paid') {
                   paymentStatusBar = 'border-t-4 border-green-500';
                 } else if (paymentStatusInfo.status === 'overdue') {
                   paymentStatusBar = 'border-t-4 border-red-500';
+                  cardBgColor = 'bg-red-50 border border-red-200';  // Red background for overdue
+                } else if (paymentStatusInfo.status === 'partial') {
+                  paymentStatusBar = 'border-t-4 border-red-500';
+                  cardBgColor = 'bg-red-50 border border-red-200';  // Red background for partial payment
                 } else if (paymentStatusInfo.status === 'due_soon') {
-                  paymentStatusBar = 'border-t-4 border-amber-500';
+                  paymentStatusBar = 'border-t-4 border-red-500';
+                  cardBgColor = 'bg-red-50 border border-red-200';  // Red background for due soon (not paid)
                 }
               }
 
               return (
               <motion.div
                 key={tenancy.id || tenancy._id}
-                className={`rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow ${
-                  showPastTenants 
-                    ? 'bg-gray-50 border border-gray-200' 
-                    : 'bg-white'
-                } ${paymentStatusBar}`}
+                className={`rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow ${cardBgColor} ${paymentStatusBar}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
               >
@@ -849,6 +892,16 @@ const TenantsPage: React.FC = () => {
                       <span>Room {tenancy.roomId?.roomNumber || 'N/A'}</span>
                     )}
                   </div>
+                  {/* Food Preference Display */}
+                  <div className="flex items-center text-sm">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      tenancy.withFood
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {tenancy.withFood ? '🍽️ With Food' : 'Without Food'}
+                    </span>
+                  </div>
                   {/* Rent Period and Payment Status */}
                   {rentPeriodInfo && paymentStatusInfo && (
                     <>
@@ -870,7 +923,7 @@ const TenantsPage: React.FC = () => {
                           </span>
                         )}
                         {paymentStatusInfo.remainingAmount && paymentStatusInfo.remainingAmount > 0 && (
-                          <span className="text-xs text-yellow-700 font-medium">
+                          <span className="text-xs text-red-700 font-medium">
                             Remaining: {formatCurrency(paymentStatusInfo.remainingAmount)}
                           </span>
                         )}
@@ -919,6 +972,17 @@ const TenantsPage: React.FC = () => {
                       >
                         <DollarSign className="w-4 h-4 mr-2" />
                         Record Payment
+                      </Button>
+                    )}
+                    {!showPastTenants && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="flex-1 min-w-[120px] bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
+                        onClick={() => handleEditTenancyClick(tenancy)}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit Details
                       </Button>
                     )}
                     {showPastTenants ? (
@@ -1118,6 +1182,115 @@ const TenantsPage: React.FC = () => {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Edit Tenancy Modal */}
+      <Modal
+        isOpen={isEditTenancyModalOpen}
+        onClose={() => {
+          setIsEditTenancyModalOpen(false);
+          setSelectedTenancy(null);
+          setEditTenancyFormData(null);
+        }}
+        title="Edit Tenancy Details"
+      >
+        <form onSubmit={handleUpdateTenancy} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Room
+            </label>
+            <select
+              name="roomId"
+              value={editTenancyFormData?.roomId || ''}
+              onChange={handleTenancyInputChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              <option value="">Select Room</option>
+              {roomsData?.rooms?.map((room: any) => (
+                <option key={room._id || room.id} value={room._id || room.id}>
+                  {room.hostelId?.name || 'Unknown Hostel'} - Room {room.roomNumber}
+                  (Capacity: {room.capacity}, Rent: {formatCurrency(room.rentAmount)})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Monthly Share (Rent Amount)
+            </label>
+            <input
+              type="number"
+              name="tenantShare"
+              value={editTenancyFormData?.tenantShare || 0}
+              onChange={handleTenancyInputChange}
+              min="0"
+              step="0.01"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              The monthly rent amount this tenant pays
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Start Date (Check-in Date)
+            </label>
+            <input
+              type="date"
+              name="startDate"
+              value={editTenancyFormData?.startDate || ''}
+              onChange={handleTenancyInputChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              The date when the tenant started/will start renting
+            </p>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+            <p className="text-sm text-blue-800">
+              <strong>Note:</strong> Changing these details will affect:
+            </p>
+            <ul className="text-xs text-blue-700 mt-2 space-y-1 list-disc list-inside">
+              <li>Future rent calculations if you change the monthly share</li>
+              <li>Rent period calculations if you change the start date</li>
+              <li>Room availability if you move tenant to different room</li>
+            </ul>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsEditTenancyModalOpen(false);
+                setSelectedTenancy(null);
+                setEditTenancyFormData(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={updateTenancyMutation.isPending}
+            >
+              {updateTenancyMutation.isPending ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  <span className="ml-2">Updating...</span>
+                </>
+              ) : (
+                'Save Changes'
+              )}
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       {/* Delete Tenant Modal */}
@@ -1928,12 +2101,6 @@ const TenantsPage: React.FC = () => {
             emergencyContactName: '',
             emergencyContactNumber: '',
             emergencyContactRelation: '',
-            roomNumber: '',
-            roomCategory: '',
-            accommodationType: '',
-            withFood: false,
-            checkInDate: '',
-            aadharProofUrl: '',
           });
         }}
         title="Add New Tenant"
@@ -1956,13 +2123,14 @@ const TenantsPage: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
                 <input
                   type="text"
                   name="lastName"
                   value={addTenantFormData.lastName}
                   onChange={handleAddTenantInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  required
                 />
               </div>
               <div>
@@ -2153,95 +2321,6 @@ const TenantsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Room & Accommodation Details (Optional) */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Room & Accommodation Details (Optional)</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={addTenantFormData.email}
-                  onChange={handleAddTenantInputChange}
-                  placeholder="tenant@example.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Room Number</label>
-                <input
-                  type="text"
-                  name="roomNumber"
-                  value={addTenantFormData.roomNumber}
-                  onChange={handleAddTenantInputChange}
-                  placeholder="e.g., 208, 108-209"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Room Category</label>
-                <select
-                  name="roomCategory"
-                  value={addTenantFormData.roomCategory}
-                  onChange={handleAddTenantInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select category</option>
-                  <option value="AC">AC</option>
-                  <option value="Non-AC">Non-AC</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Accommodation Type</label>
-                <select
-                  name="accommodationType"
-                  value={addTenantFormData.accommodationType}
-                  onChange={handleAddTenantInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select type</option>
-                  <option value="Single">Single</option>
-                  <option value="Two">Two</option>
-                  <option value="Three">Three</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Check-in Date</label>
-                <input
-                  type="date"
-                  name="checkInDate"
-                  value={addTenantFormData.checkInDate}
-                  onChange={handleAddTenantInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Aadhar Proof URL</label>
-                <input
-                  type="url"
-                  name="aadharProofUrl"
-                  value={addTenantFormData.aadharProofUrl}
-                  onChange={handleAddTenantInputChange}
-                  placeholder="Google Drive link"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    name="withFood"
-                    checked={addTenantFormData.withFood}
-                    onChange={(e) => setAddTenantFormData({ ...addTenantFormData, withFood: e.target.checked })}
-                    className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <span className="text-sm font-medium text-gray-700">With Food</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
             <Button
               type="button"
@@ -2268,12 +2347,6 @@ const TenantsPage: React.FC = () => {
                   emergencyContactName: '',
                   emergencyContactNumber: '',
                   emergencyContactRelation: '',
-                  roomNumber: '',
-                  roomCategory: '',
-                  accommodationType: '',
-                  withFood: false,
-                  checkInDate: '',
-                  aadharProofUrl: '',
                 });
               }}
               disabled={createTenantMutation.isPending}

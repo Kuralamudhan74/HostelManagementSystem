@@ -11,14 +11,16 @@ import {
   registerSchema,
   changePasswordSchema
 } from '../controllers/authController';
-import { 
+import {
   createHostel,
   getHostels,
   deleteHostel,
   createRoom,
   getRooms,
+  updateRoom,
   addTenantToRoom,
   endTenancy,
+  updateTenancy,
   getTenants,
   recordPayment,
   getPayments,
@@ -94,6 +96,7 @@ router.delete('/admin/hostels/:hostelId', authenticate, requireAdmin, async (req
 
 router.post('/admin/rooms', authenticate, requireAdmin, validate(createRoomSchema), createRoom);
 router.get('/admin/rooms', authenticate, requireAdmin, getRooms);
+router.patch('/admin/rooms/:roomId', authenticate, requireAdmin, updateRoom);
 router.delete('/admin/rooms/:roomId', authenticate, requireAdmin, async (req, res, next) => {
   const { deleteRoom } = await import('../controllers/adminController');
   return deleteRoom(req as any, res);
@@ -103,6 +106,10 @@ router.post('/admin/rooms/:roomId/tenants', authenticate, requireAdmin, validate
 router.patch('/admin/tenancies/:tenancyId/end', authenticate, requireAdmin, async (req, res, next) => {
   const { endTenancy } = await import('../controllers/adminController');
   return endTenancy(req as any, res);
+});
+router.patch('/admin/tenancies/:tenancyId', authenticate, requireAdmin, async (req, res, next) => {
+  const { updateTenancy } = await import('../controllers/adminController');
+  return updateTenancy(req as any, res);
 });
 router.post('/admin/tenants', authenticate, requireAdmin, async (req, res, next) => {
   const { createTenant } = await import('../controllers/adminController');

@@ -51,6 +51,14 @@ const addTenantToRoomSchema = z.object({
   })
 });
 
+const updateTenancySchema = z.object({
+  body: z.object({
+    roomId: z.string().optional(),
+    tenantShare: z.number().optional(),
+    startDate: z.string().optional()
+  })
+});
+
 const recordPaymentSchema = z.object({
   body: z.object({
     tenantId: z.string().min(1),
@@ -257,12 +265,66 @@ export const getRooms = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const updateRoom = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { roomId } = req.params;
+    const { roomNumber, capacity, rentAmount, isAC, bathroomAttached } = req.body;
+
+    const room = await Room.findById(roomId);
+
+    if (!room) {
+      res.status(404).json({ message: 'Room not found' });
+      return;
+    }
+
+    // Store old values for audit log
+    const oldData = {
+      roomNumber: room.roomNumber,
+      capacity: room.capacity,
+      rentAmount: room.rentAmount,
+      isAC: room.isAC,
+      bathroomAttached: room.bathroomAttached
+    };
+
+    // Update fields if provided
+    if (roomNumber !== undefined) room.roomNumber = roomNumber;
+    if (capacity !== undefined) room.capacity = capacity;
+    if (rentAmount !== undefined) room.rentAmount = rentAmount;
+    if (isAC !== undefined) room.isAC = isAC;
+    if (bathroomAttached !== undefined) room.bathroomAttached = bathroomAttached;
+
+    await room.save();
+
+    await logAction(req.user!, 'Room', room._id, 'update', oldData, {
+      roomNumber: room.roomNumber,
+      capacity: room.capacity,
+      rentAmount: room.rentAmount,
+      isAC: room.isAC,
+      bathroomAttached: room.bathroomAttached
+    });
+
+    // Populate hostel details for response
+    const updatedRoom = await Room.findById(roomId).populate('hostelId', 'name address');
+
+    res.json({
+      message: 'Room updated successfully',
+      room: updatedRoom
+    });
+  } catch (error: any) {
+    console.error('Update room error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 export const deleteRoom = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { roomId } = req.params;
 
     const room = await Room.findById(roomId);
-    
+
     if (!room) {
       res.status(404).json({ message: 'Room not found' });
       return;
@@ -275,7 +337,7 @@ export const deleteRoom = async (req: AuthRequest, res: Response): Promise<void>
     });
 
     if (activeTenancies > 0) {
-      res.status(400).json({ 
+      res.status(400).json({
         message: 'Cannot delete room with active tenants. Please remove all tenants first.'
       });
       return;
@@ -300,7 +362,7 @@ export const deleteRoom = async (req: AuthRequest, res: Response): Promise<void>
     });
   } catch (error: any) {
     console.error('Delete room error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: error.message || 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
@@ -400,10 +462,10 @@ export const endTenancy = async (req: AuthRequest, res: Response): Promise<void>
     const { tenancyId } = req.params;
 
     const tenancy = await Tenancy.findById(tenancyId);
-    
+
     if (!tenancy) {
-      res.status(404).json({ 
-        message: 'Tenancy not found' 
+      res.status(404).json({
+        message: 'Tenancy not found'
       });
       return;
     }
@@ -427,7 +489,80 @@ export const endTenancy = async (req: AuthRequest, res: Response): Promise<void>
     });
   } catch (error: any) {
     console.error('End tenancy error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+export const updateTenancy = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenancyId } = req.params;
+    const { roomId, tenantShare, startDate } = req.body;
+
+    const tenancy = await Tenancy.findById(tenancyId);
+
+    if (!tenancy) {
+      res.status(404).json({
+        message: 'Tenancy not found'
+      });
+      return;
+    }
+
+    // Store old values for audit log
+    const oldData = {
+      roomId: tenancy.roomId,
+      tenantShare: tenancy.tenantShare,
+      startDate: tenancy.startDate
+    };
+
+    // Update fields if provided
+    if (roomId !== undefined) {
+      // Validate the new room exists
+      const room = await Room.findById(roomId);
+      if (!room) {
+        res.status(404).json({
+          message: 'Room not found'
+        });
+        return;
+      }
+      tenancy.roomId = roomId as any;
+    }
+
+    if (tenantShare !== undefined) {
+      tenancy.tenantShare = tenantShare;
+    }
+
+    if (startDate !== undefined) {
+      tenancy.startDate = new Date(startDate);
+    }
+
+    await tenancy.save();
+
+    await logAction(req.user!, 'Tenancy', tenancy._id, 'update', oldData, {
+      roomId: tenancy.roomId,
+      tenantShare: tenancy.tenantShare,
+      startDate: tenancy.startDate
+    });
+
+    // Populate the updated tenancy with room and hostel details
+    const updatedTenancy = await Tenancy.findById(tenancyId)
+      .populate({
+        path: 'roomId',
+        populate: {
+          path: 'hostelId'
+        }
+      })
+      .populate('tenantId');
+
+    res.json({
+      message: 'Tenancy updated successfully',
+      tenancy: updatedTenancy
+    });
+  } catch (error: any) {
+    console.error('Update tenancy error:', error);
+    res.status(500).json({
       message: error.message || 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });

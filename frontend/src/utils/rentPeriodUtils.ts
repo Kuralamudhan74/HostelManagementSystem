@@ -354,16 +354,16 @@ export function getPaymentStatus(
     return {
       status: 'due_soon',
       label: 'Due Soon',
-      colorClass: 'text-amber-700',
-      bgColorClass: 'bg-amber-100',
+      colorClass: 'text-red-700',
+      bgColorClass: 'bg-red-100',
     };
   }
-  
+
   return {
     status: 'due_soon',
     label: 'Pending',
-    colorClass: 'text-gray-700',
-    bgColorClass: 'bg-gray-100',
+    colorClass: 'text-red-700',
+    bgColorClass: 'bg-red-100',
   };
 }
 

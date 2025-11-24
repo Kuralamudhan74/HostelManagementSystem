@@ -124,6 +124,11 @@ class ApiClient {
     return response.data;
   }
 
+  async updateRoom(roomId: string, data: { roomNumber?: string; capacity?: number; rentAmount?: number; isAC?: boolean; bathroomAttached?: boolean }): Promise<{ message: string; room: any }> {
+    const response = await this.client.patch(`/admin/rooms/${roomId}`, data);
+    return response.data;
+  }
+
   async deleteRoom(roomId: string): Promise<{ message: string }> {
     const response = await this.client.delete(`/admin/rooms/${roomId}`);
     return response.data;
@@ -131,6 +136,11 @@ class ApiClient {
 
   async endTenancy(tenancyId: string): Promise<{ message: string; tenancy: any }> {
     const response = await this.client.patch(`/admin/tenancies/${tenancyId}/end`);
+    return response.data;
+  }
+
+  async updateTenancy(tenancyId: string, data: { roomId?: string; tenantShare?: number; startDate?: string }): Promise<{ message: string; tenancy: any }> {
+    const response = await this.client.patch(`/admin/tenancies/${tenancyId}`, data);
     return response.data;
   }
 

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Building2, ArrowLeft, Plus, Users, CheckCircle, Search, Trash2, Zap, AirVent, Bath } from 'lucide-react';
+import { Building2, ArrowLeft, Plus, Users, CheckCircle, Search, Trash2, Zap, AirVent, Bath, Edit } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -34,11 +34,13 @@ const RoomsPage: React.FC = () => {
   const queryClient = useQueryClient();
   
   const [isAddRoomModalOpen, setIsAddRoomModalOpen] = useState(false);
+  const [isEditRoomModalOpen, setIsEditRoomModalOpen] = useState(false);
   const [isAssignTenantModalOpen, setIsAssignTenantModalOpen] = useState(false);
   const [isReassignConfirmModalOpen, setIsReassignConfirmModalOpen] = useState(false);
   const [isDeleteRoomModalOpen, setIsDeleteRoomModalOpen] = useState(false);
   const [isEBBillModalOpen, setIsEBBillModalOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
+  const [editRoomFormData, setEditRoomFormData] = useState<any>(null);
   const [ebBillAmount, setEbBillAmount] = useState('');
   const [tenantSearch, setTenantSearch] = useState('');
   const [debouncedTenantSearch, setDebouncedTenantSearch] = useState('');
@@ -202,6 +204,52 @@ const RoomsPage: React.FC = () => {
       toast.error(error.response?.data?.message || 'Failed to delete room');
     },
   });
+
+  // Update room mutation
+  const updateRoomMutation = useMutation({
+    mutationFn: ({ roomId, data }: { roomId: string; data: any }) =>
+      apiClient.updateRoom(roomId, data),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Room updated successfully');
+      setIsEditRoomModalOpen(false);
+      setSelectedRoom(null);
+      setEditRoomFormData(null);
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update room');
+    },
+  });
+
+  const handleEditRoomClick = (room: any) => {
+    setSelectedRoom(room);
+    setEditRoomFormData({
+      roomNumber: room.roomNumber || '',
+      capacity: room.capacity || 1,
+      rentAmount: room.rentAmount || 0,
+      isAC: room.isAC || false,
+      bathroomAttached: room.bathroomAttached || false,
+    });
+    setIsEditRoomModalOpen(true);
+  };
+
+  const handleUpdateRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRoom) return;
+
+    const roomId = selectedRoom._id || selectedRoom.id;
+    updateRoomMutation.mutate({ roomId, data: editRoomFormData });
+  };
+
+  const handleEditRoomInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    setEditRoomFormData((prev: any) => ({
+      ...prev,
+      [name]: type === 'checkbox'
+        ? (e.target as HTMLInputElement).checked
+        : (name === 'capacity' || name === 'rentAmount' ? parseFloat(value) || 0 : value)
+    }));
+  };
 
   const handleEBBillClick = (room: any) => {
     setSelectedRoom(room);
@@ -510,6 +558,15 @@ const RoomsPage: React.FC = () => {
                     <Button
                       variant="secondary"
                       size="sm"
+                      className="w-full text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      onClick={() => handleEditRoomClick(room)}
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit Room
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                       onClick={() => handleEBBillClick(room)}
                     >
@@ -660,6 +717,116 @@ const RoomsPage: React.FC = () => {
               variant="primary"
             >
               Create Room
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Room Modal */}
+      <Modal
+        isOpen={isEditRoomModalOpen}
+        onClose={() => {
+          setIsEditRoomModalOpen(false);
+          setSelectedRoom(null);
+          setEditRoomFormData(null);
+        }}
+        title="Edit Room"
+      >
+        <form onSubmit={handleUpdateRoom} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Room Number *
+            </label>
+            <input
+              type="text"
+              name="roomNumber"
+              value={editRoomFormData?.roomNumber || ''}
+              onChange={handleEditRoomInputChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              placeholder="101"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Capacity (beds) *
+            </label>
+            <input
+              type="number"
+              name="capacity"
+              value={editRoomFormData?.capacity || 1}
+              onChange={handleEditRoomInputChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              min="1"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Monthly Rent (₹) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              name="rentAmount"
+              value={editRoomFormData?.rentAmount || 0}
+              onChange={handleEditRoomInputChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              min="0"
+              required
+            />
+          </div>
+
+          <div className="flex items-center space-x-6 pt-2">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                name="isAC"
+                checked={editRoomFormData?.isAC || false}
+                onChange={handleEditRoomInputChange}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700">Air Conditioned</span>
+            </label>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                name="bathroomAttached"
+                checked={editRoomFormData?.bathroomAttached || false}
+                onChange={handleEditRoomInputChange}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700">Bathroom Attached</span>
+            </label>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsEditRoomModalOpen(false);
+                setSelectedRoom(null);
+                setEditRoomFormData(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={updateRoomMutation.isPending}
+            >
+              {updateRoomMutation.isPending ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  <span className="ml-2">Updating...</span>
+                </>
+              ) : (
+                'Save Changes'
+              )}
             </Button>
           </div>
         </form>
