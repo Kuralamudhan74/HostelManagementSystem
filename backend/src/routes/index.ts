@@ -21,6 +21,7 @@ import {
   addTenantToRoom,
   endTenancy,
   updateTenancy,
+  updateTenancyEBBill,
   getTenants,
   recordPayment,
   getPayments,
@@ -113,6 +114,7 @@ router.patch('/admin/tenancies/:tenancyId', authenticate, requireAdmin, async (r
   const { updateTenancy } = await import('../controllers/adminController');
   return updateTenancy(req as any, res);
 });
+router.patch('/admin/tenancies/:tenancyId/ebbill', authenticate, requireAdmin, updateTenancyEBBill);
 router.post('/admin/tenants', authenticate, requireAdmin, async (req, res, next) => {
   const { createTenant } = await import('../controllers/adminController');
   return createTenant(req as any, res);

@@ -144,6 +144,11 @@ class ApiClient {
     return response.data;
   }
 
+  async updateTenancyEBBill(tenancyId: string, currentMonthEBBill: number): Promise<{ message: string; currentMonthEBBill: number }> {
+    const response = await this.client.patch(`/admin/tenancies/${tenancyId}/ebbill`, { currentMonthEBBill });
+    return response.data;
+  }
+
   async getTenants(params?: {
     hostelId?: string;
     room?: string;

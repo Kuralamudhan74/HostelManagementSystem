@@ -569,6 +569,59 @@ export const updateTenancy = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
+// Update tenancy EB bill (admin only)
+export const updateTenancyEBBill = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenancyId } = req.params;
+    const { currentMonthEBBill } = req.body;
+
+    if (currentMonthEBBill === undefined || currentMonthEBBill === null) {
+      res.status(400).json({ message: 'EB bill amount is required' });
+      return;
+    }
+
+    if (currentMonthEBBill < 0) {
+      res.status(400).json({ message: 'EB bill amount cannot be negative' });
+      return;
+    }
+
+    const tenancy = await Tenancy.findById(tenancyId);
+
+    if (!tenancy) {
+      res.status(404).json({ message: 'Tenancy not found' });
+      return;
+    }
+
+    // Store old EB bill for audit log
+    const oldEBBill = tenancy.currentMonthEBBill || 0;
+
+    // Update EB bill
+    tenancy.currentMonthEBBill = currentMonthEBBill;
+    await tenancy.save();
+
+    // Log the change
+    await logAction(
+      req.user!,
+      'Tenancy',
+      tenancyId,
+      'update',
+      { currentMonthEBBill: oldEBBill },
+      { currentMonthEBBill: currentMonthEBBill }
+    );
+
+    res.json({
+      message: 'EB bill updated successfully',
+      currentMonthEBBill: tenancy.currentMonthEBBill
+    });
+  } catch (error: any) {
+    console.error('Update EB bill error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 export const getTenants = async (req: AuthRequest, res: Response) => {
   try {
     const { 

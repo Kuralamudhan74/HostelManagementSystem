@@ -172,6 +172,7 @@ export interface ITenancy extends Document {
   tenantShare?: number; // For shared rooms
   withFood?: boolean;
   foodIncluded?: boolean;
+  currentMonthEBBill?: number; // Current month's EB bill for this tenant
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -185,6 +186,7 @@ const tenancySchema = new Schema<ITenancy>({
   tenantShare: { type: Number }, // Percentage or fixed amount
   withFood: { type: Boolean, default: false },
   foodIncluded: { type: Boolean, default: false }, // Alias for withFood
+  currentMonthEBBill: { type: Number, default: 0 }, // Current month's EB bill
   isActive: { type: Boolean, default: true }
 }, {
   timestamps: true

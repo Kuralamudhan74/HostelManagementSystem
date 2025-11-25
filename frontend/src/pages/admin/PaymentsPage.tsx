@@ -191,9 +191,11 @@ const PaymentsPage: React.FC = () => {
     const hasPayment = paymentsForCurrentPeriod.length > 0;
     const statusInfo = getPaymentStatus(period.startDate, period.endDate, hasPayment);
 
-    // Calculate remaining amount
+    // Calculate remaining amount including EB bill
     const totalRent = tenancy.tenantShare || 0;
-    const remainingAmount = Math.max(0, totalRent - totalPaidForPeriod);
+    const ebBill = tenancy.currentMonthEBBill || 0;
+    const totalAmountDue = totalRent + ebBill;
+    const remainingAmount = Math.max(0, totalAmountDue - totalPaidForPeriod);
 
     return {
       period,
@@ -203,6 +205,8 @@ const PaymentsPage: React.FC = () => {
       totalPaidForPeriod,
       remainingAmount,
       totalRent,
+      ebBill,
+      totalAmountDue,
     };
   }, [selectedTenantId, tenantsData, allPaymentsData]);
 
@@ -703,8 +707,24 @@ const PaymentsPage: React.FC = () => {
               <div className="space-y-2 mb-3">
                 <div className="bg-white border border-blue-300 rounded-md p-2">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-blue-900">Total Rent:</span>
+                    <span className="text-blue-900">Monthly Rent:</span>
                     <span className="font-semibold text-blue-700">{formatCurrency(rentPeriodInfo.totalRent)}</span>
+                  </div>
+                </div>
+
+                {rentPeriodInfo.ebBill > 0 && (
+                  <div className="bg-yellow-50 border border-yellow-300 rounded-md p-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-yellow-900">EB Bill:</span>
+                      <span className="font-semibold text-yellow-700">+{formatCurrency(rentPeriodInfo.ebBill)}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-blue-100 border border-blue-400 rounded-md p-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-blue-900 font-bold">Total Due:</span>
+                    <span className="font-bold text-blue-700">{formatCurrency(rentPeriodInfo.totalAmountDue)}</span>
                   </div>
                 </div>
 

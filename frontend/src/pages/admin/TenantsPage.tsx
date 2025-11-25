@@ -71,6 +71,8 @@ const TenantsPage: React.FC = () => {
   const [showPastTenants, setShowPastTenants] = useState(false);
   const [isEditAdvanceModalOpen, setIsEditAdvanceModalOpen] = useState(false);
   const [editAdvanceAmount, setEditAdvanceAmount] = useState<number>(0);
+  const [isEditEBBillModalOpen, setIsEditEBBillModalOpen] = useState(false);
+  const [editEBBillAmount, setEditEBBillAmount] = useState<number>(0);
 
   const [searchParams, setSearchParams] = useState({
     search: '',
@@ -210,6 +212,21 @@ const TenantsPage: React.FC = () => {
     },
   });
 
+  // Update EB bill mutation
+  const updateEBBillMutation = useMutation({
+    mutationFn: ({ tenancyId, currentMonthEBBill }: { tenancyId: string; currentMonthEBBill: number }) =>
+      apiClient.updateTenancyEBBill(tenancyId, currentMonthEBBill),
+    onSuccess: (data) => {
+      toast.success(data.message || 'EB bill updated successfully');
+      setIsEditEBBillModalOpen(false);
+      setSelectedTenancy(null);
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update EB bill');
+    },
+  });
+
   // Update tenancy mutation
   const updateTenancyMutation = useMutation({
     mutationFn: ({ tenancyId, data }: { tenancyId: string; data: any }) =>
@@ -321,6 +338,14 @@ const TenantsPage: React.FC = () => {
 
     const tenantId = selectedTenantProfile._id || selectedTenantProfile.id;
     updateAdvanceMutation.mutate({ tenantId, advanceAmount: editAdvanceAmount });
+  };
+
+  const handleUpdateEBBill = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenancy) return;
+
+    const tenancyId = selectedTenancy._id || selectedTenancy.id;
+    updateEBBillMutation.mutate({ tenancyId, currentMonthEBBill: editEBBillAmount });
   };
 
   const handleEditTenancyClick = (tenancy: any) => {
@@ -964,6 +989,34 @@ const TenantsPage: React.FC = () => {
                   <p className="text-sm text-gray-600 mb-2">
                     Monthly Share: <span className="font-semibold">{formatCurrency(tenancy.tenantShare || 0)}</span>
                   </p>
+
+                  {/* EB Bill Section */}
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-md p-2 mb-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-yellow-900 font-medium">
+                        Current Month EB Bill: <span className="font-bold">{formatCurrency(tenancy.currentMonthEBBill || 0)}</span>
+                      </p>
+                      <button
+                        onClick={() => {
+                          setSelectedTenancy(tenancy);
+                          setIsEditEBBillModalOpen(true);
+                          setEditEBBillAmount(tenancy.currentMonthEBBill || 0);
+                        }}
+                        className="p-1 text-yellow-700 hover:text-yellow-900 hover:bg-yellow-100 rounded transition-colors"
+                        title="Edit EB Bill"
+                      >
+                        <Edit className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Total for Month */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-2 mb-2">
+                    <p className="text-xs text-blue-900 font-medium">
+                      Total for Month: <span className="font-bold">{formatCurrency((tenancy.tenantShare || 0) + (tenancy.currentMonthEBBill || 0))}</span>
+                    </p>
+                  </div>
+
                   {tenancy.tenantId?.advanceAmount && tenancy.tenantId.advanceAmount > 0 && (
                     <div className="bg-green-50 border border-green-200 rounded-md p-2 mb-2">
                       <p className="text-xs text-green-900 font-medium">
@@ -2197,6 +2250,79 @@ const TenantsPage: React.FC = () => {
               disabled={updateAdvanceMutation.isPending}
             >
               {updateAdvanceMutation.isPending ? 'Updating...' : 'Update Advance'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit EB Bill Modal */}
+      <Modal
+        isOpen={isEditEBBillModalOpen}
+        onClose={() => {
+          setIsEditEBBillModalOpen(false);
+          setEditEBBillAmount(0);
+          setSelectedTenancy(null);
+        }}
+        title="Edit Current Month EB Bill"
+        size="md"
+      >
+        <form onSubmit={handleUpdateEBBill} className="space-y-4">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-yellow-900">
+              <strong>Note:</strong> This EB bill is for the current month only and will be added to the monthly rent.
+              Update this amount each month as needed.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              EB Bill Amount (₹) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={editEBBillAmount}
+              onChange={(e) => setEditEBBillAmount(parseFloat(e.target.value) || 0)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500"
+              placeholder="0.00"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Enter the electricity bill amount for this tenant for the current month
+            </p>
+          </div>
+
+          {selectedTenancy && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+              <p className="text-xs text-blue-900 mb-1">
+                <strong>Monthly Rent:</strong> {formatCurrency(selectedTenancy.tenantShare || 0)}
+              </p>
+              <p className="text-xs text-blue-900 font-bold">
+                <strong>Total with EB:</strong> {formatCurrency((selectedTenancy.tenantShare || 0) + editEBBillAmount)}
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsEditEBBillModalOpen(false);
+                setEditEBBillAmount(0);
+                setSelectedTenancy(null);
+              }}
+              disabled={updateEBBillMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={updateEBBillMutation.isPending}
+            >
+              {updateEBBillMutation.isPending ? 'Updating...' : 'Update EB Bill'}
             </Button>
           </div>
         </form>

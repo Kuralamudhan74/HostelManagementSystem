@@ -82,6 +82,7 @@ export interface Tenancy {
   startDate: string;
   endDate?: string;
   tenantShare?: number;
+  currentMonthEBBill?: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
