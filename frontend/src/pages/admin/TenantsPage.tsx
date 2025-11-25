@@ -69,6 +69,8 @@ const TenantsPage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importResults, setImportResults] = useState<any>(null);
   const [showPastTenants, setShowPastTenants] = useState(false);
+  const [isEditAdvanceModalOpen, setIsEditAdvanceModalOpen] = useState(false);
+  const [editAdvanceAmount, setEditAdvanceAmount] = useState<number>(0);
 
   const [searchParams, setSearchParams] = useState({
     search: '',
@@ -190,6 +192,24 @@ const TenantsPage: React.FC = () => {
     },
   });
 
+  // Update tenant advance amount mutation
+  const updateAdvanceMutation = useMutation({
+    mutationFn: ({ tenantId, advanceAmount }: { tenantId: string; advanceAmount: number }) =>
+      apiClient.updateTenantAdvance(tenantId, advanceAmount),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Advance amount updated successfully');
+      setIsEditAdvanceModalOpen(false);
+      // Refresh the profile if viewing
+      if (selectedTenantProfile) {
+        handleViewProfile(selectedTenantProfile._id || selectedTenantProfile.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update advance amount');
+    },
+  });
+
   // Update tenancy mutation
   const updateTenancyMutation = useMutation({
     mutationFn: ({ tenancyId, data }: { tenancyId: string; data: any }) =>
@@ -293,6 +313,14 @@ const TenantsPage: React.FC = () => {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleUpdateAdvance = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenantProfile) return;
+
+    const tenantId = selectedTenantProfile._id || selectedTenantProfile.id;
+    updateAdvanceMutation.mutate({ tenantId, advanceAmount: editAdvanceAmount });
   };
 
   const handleEditTenancyClick = (tenancy: any) => {
@@ -936,6 +964,13 @@ const TenantsPage: React.FC = () => {
                   <p className="text-sm text-gray-600 mb-2">
                     Monthly Share: <span className="font-semibold">{formatCurrency(tenancy.tenantShare || 0)}</span>
                   </p>
+                  {tenancy.tenantId?.advanceAmount && tenancy.tenantId.advanceAmount > 0 && (
+                    <div className="bg-green-50 border border-green-200 rounded-md p-2 mb-2">
+                      <p className="text-xs text-green-900 font-medium">
+                        Advance: <span className="font-bold">{formatCurrency(tenancy.tenantId.advanceAmount)}</span>
+                      </p>
+                    </div>
+                  )}
                   <div className="text-xs text-gray-500 mb-3 space-y-1">
                     <p>
                       Started: {formatDateForDisplay(new Date(tenancy.startDate))}
@@ -1550,6 +1585,37 @@ const TenantsPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Advance Amount */}
+            <div className="border-t border-gray-200 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Advance Amount</h3>
+                <button
+                  onClick={() => {
+                    setIsEditAdvanceModalOpen(true);
+                    setEditAdvanceAmount(selectedTenantProfile.advanceAmount || 0);
+                  }}
+                  className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="Edit advance amount"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-sm font-medium text-green-900">Current Advance Balance</label>
+                    <p className="mt-1 text-2xl font-bold text-green-700">
+                      {formatCurrency(selectedTenantProfile.advanceAmount || 0)}
+                    </p>
+                  </div>
+                  <DollarSign className="w-12 h-12 text-green-400" />
+                </div>
+                <p className="text-xs text-green-700 mt-2">
+                  Note: This amount is excluded from financial overview calculations
+                </p>
+              </div>
+            </div>
           </div>
         ) : null}
       </Modal>
@@ -2075,6 +2141,66 @@ const TenantsPage: React.FC = () => {
           <LoadingSpinner />
         )}
           </Modal>
+
+      {/* Edit Advance Amount Modal */}
+      <Modal
+        isOpen={isEditAdvanceModalOpen}
+        onClose={() => {
+          setIsEditAdvanceModalOpen(false);
+          setEditAdvanceAmount(0);
+        }}
+        title="Edit Advance Amount"
+        size="md"
+      >
+        <form onSubmit={handleUpdateAdvance} className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-blue-800">
+              <strong>Note:</strong> Advance amount is kept separate from regular financial tracking.
+              It will not appear in financial overview calculations.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Advance Amount (₹) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={editAdvanceAmount}
+              onChange={(e) => setEditAdvanceAmount(parseFloat(e.target.value) || 0)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              placeholder="0.00"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Enter the total advance amount received from the tenant
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsEditAdvanceModalOpen(false);
+                setEditAdvanceAmount(0);
+              }}
+              disabled={updateAdvanceMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={updateAdvanceMutation.isPending}
+            >
+              {updateAdvanceMutation.isPending ? 'Updating...' : 'Update Advance'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Add Tenant Modal */}
       <Modal

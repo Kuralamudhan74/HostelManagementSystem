@@ -33,6 +33,8 @@ export interface IUser extends Document {
   withFood?: boolean; // Food preference
   checkInDate?: Date; // Check-in date
   aadharProofUrl?: string; // Google Drive link to Aadhar proof
+  // Financial fields
+  advanceAmount?: number; // Advance amount paid by tenant (not part of financial overview)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -67,7 +69,9 @@ const userSchema = new Schema<IUser>({
   accommodationType: { type: String },
   withFood: { type: Boolean },
   checkInDate: { type: Date },
-  aadharProofUrl: { type: String }
+  aadharProofUrl: { type: String },
+  // Financial fields
+  advanceAmount: { type: Number, default: 0 }
 }, {
   timestamps: true
 });

@@ -28,6 +28,8 @@ export interface User {
   withFood?: boolean;
   checkInDate?: string;
   aadharProofUrl?: string;
+  // Financial fields
+  advanceAmount?: number;
   isActive?: boolean;
   createdAt: string;
 }

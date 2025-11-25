@@ -177,6 +177,11 @@ class ApiClient {
     return response.data;
   }
 
+  async updateTenantAdvance(tenantId: string, advanceAmount: number): Promise<{ message: string; advanceAmount: number }> {
+    const response = await this.client.patch(`/admin/tenants/${tenantId}/advance`, { advanceAmount });
+    return response.data;
+  }
+
   async importTenantsFromCSV(file: File): Promise<{
     message: string;
     success: number;
@@ -224,6 +229,11 @@ class ApiClient {
     const response = await this.client.get('/admin/payments/suggest', {
       params: { tenantId, amount }
     });
+    return response.data;
+  }
+
+  async deletePayment(paymentId: string): Promise<{ message: string }> {
+    const response = await this.client.delete(`/admin/payments/${paymentId}`);
     return response.data;
   }
 
@@ -300,8 +310,10 @@ class ApiClient {
   }
 
   // Dashboard stats
-  async getDashboardStats(): Promise<any> {
-    const response = await this.client.get('/admin/dashboard/stats');
+  async getDashboardStats(hostelId?: string): Promise<any> {
+    const response = await this.client.get('/admin/dashboard/stats', {
+      params: { hostelId }
+    });
     return response.data;
   }
 

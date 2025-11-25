@@ -31,6 +31,7 @@ const AdminDashboard: React.FC = () => {
   const [selectedHostel, setSelectedHostel] = useState<any>(null);
   const [hostelName, setHostelName] = useState('');
   const [hostelAddress, setHostelAddress] = useState('');
+  const [selectedHostelFilter, setSelectedHostelFilter] = useState<string>('all');
 
   const { data: hostels, isLoading: hostelsLoading } = useQuery({
     queryKey: ['hostels'],
@@ -43,8 +44,8 @@ const AdminDashboard: React.FC = () => {
   });
 
   const { data: dashboardStats } = useQuery({
-    queryKey: ['dashboard-stats'],
-    queryFn: () => apiClient.getDashboardStats(),
+    queryKey: ['dashboard-stats', selectedHostelFilter],
+    queryFn: () => apiClient.getDashboardStats(selectedHostelFilter === 'all' ? undefined : selectedHostelFilter),
   });
 
   // Create hostel mutation
@@ -136,7 +137,7 @@ const AdminDashboard: React.FC = () => {
     },
     {
       title: 'Total Tenants',
-      value: tenants?.tenancies?.length || 0,
+      value: dashboardStats?.totalTenants || 0,
       icon: Users,
       color: 'bg-green-500',
     },
@@ -147,8 +148,9 @@ const AdminDashboard: React.FC = () => {
       color: 'bg-yellow-500',
     },
     {
-      title: 'Occupancy Rate',
-      value: dashboardStats?.occupancyRate || '0%',
+      title: 'Room Capacity',
+      value: `${dashboardStats?.occupiedRooms || 0} / ${dashboardStats?.totalCapacity || 0}`,
+      subtitle: `Free: ${dashboardStats?.freeRooms || 0}`,
       icon: TrendingUp,
       color: 'bg-purple-500',
     },
@@ -231,6 +233,32 @@ const AdminDashboard: React.FC = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Hostel Filter */}
+        <motion.div
+          className="mb-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium text-gray-700">Filter by Hostel:</label>
+              <select
+                value={selectedHostelFilter}
+                onChange={(e) => setSelectedHostelFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Hostels</option>
+                {hostels?.hostels?.map((hostel: any) => (
+                  <option key={hostel.id || hostel._id} value={hostel.id || hostel._id}>
+                    {hostel.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </motion.div>
+
         {/* Stats Grid */}
         <motion.div
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
@@ -253,6 +281,9 @@ const AdminDashboard: React.FC = () => {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">{stat.title}</p>
                   <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                  {(stat as any).subtitle && (
+                    <p className="text-sm text-gray-500 mt-1">{(stat as any).subtitle}</p>
+                  )}
                 </div>
               </div>
             </motion.div>

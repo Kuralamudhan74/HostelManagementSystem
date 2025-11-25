@@ -24,6 +24,7 @@ import {
   getTenants,
   recordPayment,
   getPayments,
+  deletePayment,
   suggestPaymentAllocations,
   createExpense,
   getExpenses,
@@ -33,6 +34,7 @@ import {
   getRoomEBBills,
   updateRentPaymentStatus,
   getDashboardStats,
+  updateTenantAdvance,
   createHostelSchema,
   createRoomSchema,
   addTenantToRoomSchema,
@@ -124,6 +126,7 @@ router.patch('/admin/tenants/:tenantId/profile', authenticate, requireAdmin, asy
   const { updateTenantProfile } = await import('../controllers/adminController');
   return updateTenantProfile(req as any, res);
 });
+router.patch('/admin/tenants/:tenantId/advance', authenticate, requireAdmin, updateTenantAdvance);
 router.patch('/admin/tenants/:tenantId/status', authenticate, requireAdmin, async (req, res, next) => {
   const { updateTenantStatus } = await import('../controllers/adminController');
   return updateTenantStatus(req as any, res);
@@ -143,6 +146,7 @@ router.post('/admin/tenants/import-csv', authenticate, requireAdmin, csvUpload.s
 router.post('/admin/payments', authenticate, requireAdmin, validate(recordPaymentSchema), recordPayment);
 router.get('/admin/payments', authenticate, requireAdmin, getPayments);
 router.get('/admin/payments/suggest', authenticate, requireAdmin, suggestPaymentAllocations);
+router.delete('/admin/payments/:paymentId', authenticate, requireAdmin, deletePayment);
 
 router.post('/admin/expenses', authenticate, requireAdmin, validate(createExpenseSchema), createExpense);
 router.get('/admin/expenses', authenticate, requireAdmin, getExpenses);
