@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { DollarSign, ArrowLeft, Plus, Calendar, User } from 'lucide-react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { DollarSign, ArrowLeft, Plus, Calendar, User, Trash2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -67,6 +67,8 @@ const PaymentsPage: React.FC = () => {
   const [filterTenantId, setFilterTenantId] = useState<string>('');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
   const [filterEndDate, setFilterEndDate] = useState<string>('');
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState<any>(null);
 
   // Debounced filter values
   const [debouncedFilterTenantId, setDebouncedFilterTenantId] = useState<string>('');
@@ -144,7 +146,7 @@ const PaymentsPage: React.FC = () => {
   // Calculate rent period when tenant is selected
   const rentPeriodInfo = useMemo(() => {
     if (!selectedTenantId || !tenantsData?.tenancies) return null;
-    
+
     const tenancy = tenantsData.tenancies.find((t: any) => {
       const tenantId = t.tenantId?.id || t.tenantId?._id || t.tenantId;
       return tenantId === selectedTenantId && t.isActive;
@@ -153,24 +155,25 @@ const PaymentsPage: React.FC = () => {
     if (!tenancy || !tenancy.startDate) return null;
 
     const checkInDate = new Date(tenancy.startDate);
-    
+
     // Get all payments for this tenant
     const tenantPayments = (allPaymentsData?.payments || []).filter((payment: any) => {
       const paymentTenantId = payment.tenantId?.id || payment.tenantId?._id || payment.tenantId;
       return paymentTenantId === selectedTenantId;
     });
-    
+
     // Calculate current period based on payment history (if any)
     // This will use the last payment period to determine the current cycle
     const period = calculateCurrentRentPeriodWithPayments(checkInDate, tenantPayments);
-    
-    // Check if tenant has paid for the CURRENT rent period
-    const hasPayment = tenantPayments.some((payment: any) => {
+
+    // Calculate total paid amount for the CURRENT rent period
+    let totalPaidForPeriod = 0;
+    const paymentsForCurrentPeriod = tenantPayments.filter((payment: any) => {
       if (!payment.paymentPeriodStart || !payment.paymentPeriodEnd) return false;
-      
+
       const payStart = new Date(payment.paymentPeriodStart);
       const payEnd = new Date(payment.paymentPeriodEnd);
-      
+
       // Check if payment period overlaps with current rent period
       return isPaymentPeriodValid(
         payStart,
@@ -180,13 +183,30 @@ const PaymentsPage: React.FC = () => {
       );
     });
 
+    // Sum up all payments for current period
+    paymentsForCurrentPeriod.forEach((payment: any) => {
+      totalPaidForPeriod += payment.amount || 0;
+    });
+
+    const hasPayment = paymentsForCurrentPeriod.length > 0;
     const statusInfo = getPaymentStatus(period.startDate, period.endDate, hasPayment);
+
+    // Calculate remaining amount including EB bill
+    const totalRent = tenancy.tenantShare || 0;
+    const ebBill = tenancy.currentMonthEBBill || 0;
+    const totalAmountDue = totalRent + ebBill;
+    const remainingAmount = Math.max(0, totalAmountDue - totalPaidForPeriod);
 
     return {
       period,
       statusInfo,
       tenancy,
       checkInDate,
+      totalPaidForPeriod,
+      remainingAmount,
+      totalRent,
+      ebBill,
+      totalAmountDue,
     };
   }, [selectedTenantId, tenantsData, allPaymentsData]);
 
@@ -220,6 +240,33 @@ const PaymentsPage: React.FC = () => {
     };
   }, [periodStart, periodEnd]);
 
+  // Delete payment mutation
+  const deletePaymentMutation = useMutation({
+    mutationFn: (paymentId: string) => apiClient.deletePayment(paymentId),
+    onSuccess: () => {
+      toast.success('Payment deleted successfully');
+      setIsDeleteModalOpen(false);
+      setPaymentToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['admin/payments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin/payments/all'] });
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to delete payment');
+    },
+  });
+
+  const handleDeleteClick = (payment: any) => {
+    setPaymentToDelete(payment);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (paymentToDelete) {
+      deletePaymentMutation.mutate(paymentToDelete.id || paymentToDelete._id);
+    }
+  };
+
   const handleRecordPayment = async (data: any) => {
     try {
       // Validate period dates if both are provided
@@ -231,9 +278,9 @@ const PaymentsPage: React.FC = () => {
           return;
         }
       }
-      
+
       console.log('Recording payment with data:', data);
-      
+
       // Record payment with period information
       const formattedData = {
         tenantId: data.tenantId,
@@ -249,7 +296,7 @@ const PaymentsPage: React.FC = () => {
       };
 
       console.log('Formatted payment data:', formattedData);
-      
+
       await apiClient.recordPayment(formattedData);
 
       toast.success('Payment recorded successfully');
@@ -422,6 +469,9 @@ const PaymentsPage: React.FC = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Description
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -472,6 +522,15 @@ const PaymentsPage: React.FC = () => {
                             {payment.description || 'N/A'}
                           </span>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <button
+                            onClick={() => handleDeleteClick(payment)}
+                            className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                            title="Delete payment"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
                       </motion.tr>
                     ))}
                   </tbody>
@@ -511,6 +570,30 @@ const PaymentsPage: React.FC = () => {
               <p className="text-red-500 text-xs mt-1">{errors.tenantId.message as string}</p>
             )}
           </div>
+
+          {/* Show Advance Amount for Selected Tenant */}
+          {selectedTenantId && uniqueTenants.length > 0 && (() => {
+            const selectedTenant = uniqueTenants.find((t: any) => (t.id || t._id) === selectedTenantId);
+            if (selectedTenant && selectedTenant.advanceAmount && selectedTenant.advanceAmount > 0) {
+              return (
+                <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-medium text-green-900">Advance Balance Available</label>
+                      <p className="text-lg font-bold text-green-700 mt-1">
+                        {formatCurrency(selectedTenant.advanceAmount)}
+                      </p>
+                    </div>
+                    <DollarSign className="w-8 h-8 text-green-400" />
+                  </div>
+                  <p className="text-xs text-green-700 mt-2">
+                    This is for reference only. Advance is tracked separately and not deducted automatically.
+                  </p>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -619,6 +702,65 @@ const PaymentsPage: React.FC = () => {
               <p className="text-sm text-blue-800 mb-3">
                 {formatDateForDisplay(rentPeriodInfo.period.startDate)} → {formatDateForDisplay(rentPeriodInfo.period.endDate)}
               </p>
+
+              {/* Show payment breakdown */}
+              <div className="space-y-2 mb-3">
+                <div className="bg-white border border-blue-300 rounded-md p-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-blue-900">Monthly Rent:</span>
+                    <span className="font-semibold text-blue-700">{formatCurrency(rentPeriodInfo.totalRent)}</span>
+                  </div>
+                </div>
+
+                {rentPeriodInfo.ebBill > 0 && (
+                  <div className="bg-yellow-50 border border-yellow-300 rounded-md p-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-yellow-900">EB Bill:</span>
+                      <span className="font-semibold text-yellow-700">+{formatCurrency(rentPeriodInfo.ebBill)}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-blue-100 border border-blue-400 rounded-md p-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-blue-900 font-bold">Total Due:</span>
+                    <span className="font-bold text-blue-700">{formatCurrency(rentPeriodInfo.totalAmountDue)}</span>
+                  </div>
+                </div>
+
+                {rentPeriodInfo.totalPaidForPeriod > 0 && (
+                  <div className="bg-green-50 border border-green-300 rounded-md p-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-green-900">Already Paid:</span>
+                      <span className="font-semibold text-green-700">-{formatCurrency(rentPeriodInfo.totalPaidForPeriod)}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className={`rounded-md p-2 border-2 ${
+                  rentPeriodInfo.remainingAmount === 0
+                    ? 'bg-green-50 border-green-400'
+                    : 'bg-orange-50 border-orange-400'
+                }`}>
+                  <div className="flex justify-between items-center">
+                    <span className={`text-sm font-bold ${
+                      rentPeriodInfo.remainingAmount === 0
+                        ? 'text-green-900'
+                        : 'text-orange-900'
+                    }`}>
+                      {rentPeriodInfo.remainingAmount === 0 ? 'Fully Paid ✓' : 'Remaining to Pay:'}
+                    </span>
+                    <span className={`text-lg font-bold ${
+                      rentPeriodInfo.remainingAmount === 0
+                        ? 'text-green-700'
+                        : 'text-orange-700'
+                    }`}>
+                      {formatCurrency(rentPeriodInfo.remainingAmount)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <p className="text-xs text-blue-700">
                 Check-in Date: {formatDateForDisplay(rentPeriodInfo.checkInDate)}
               </p>
@@ -720,6 +862,61 @@ const PaymentsPage: React.FC = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setPaymentToDelete(null);
+        }}
+        title="Delete Payment"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-700">
+            Are you sure you want to delete this payment record?
+          </p>
+          {paymentToDelete && (
+            <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
+              <div className="space-y-2">
+                <p className="text-sm text-gray-700">
+                  <span className="font-medium">Tenant:</span> {paymentToDelete.tenantId?.firstName} {paymentToDelete.tenantId?.lastName}
+                </p>
+                <p className="text-sm text-gray-700">
+                  <span className="font-medium">Amount:</span> {formatCurrency(paymentToDelete.amount)}
+                </p>
+                <p className="text-sm text-gray-700">
+                  <span className="font-medium">Date:</span> {formatDateForDisplay(new Date(paymentToDelete.paymentDate))}
+                </p>
+              </div>
+            </div>
+          )}
+          <div className="bg-red-50 border border-red-200 rounded-md p-4">
+            <p className="text-sm text-red-800">
+              <strong>Warning:</strong> This action cannot be undone. The payment record and all associated allocations will be permanently deleted.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setPaymentToDelete(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleConfirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={deletePaymentMutation.isPending}
+            >
+              {deletePaymentMutation.isPending ? 'Deleting...' : 'Delete Payment'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

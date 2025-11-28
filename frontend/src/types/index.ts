@@ -28,6 +28,8 @@ export interface User {
   withFood?: boolean;
   checkInDate?: string;
   aadharProofUrl?: string;
+  // Financial fields
+  advanceAmount?: number;
   isActive?: boolean;
   createdAt: string;
 }
@@ -80,6 +82,7 @@ export interface Tenancy {
   startDate: string;
   endDate?: string;
   tenantShare?: number;
+  currentMonthEBBill?: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

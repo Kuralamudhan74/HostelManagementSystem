@@ -51,6 +51,14 @@ const addTenantToRoomSchema = z.object({
   })
 });
 
+const updateTenancySchema = z.object({
+  body: z.object({
+    roomId: z.string().optional(),
+    tenantShare: z.number().optional(),
+    startDate: z.string().optional()
+  })
+});
+
 const recordPaymentSchema = z.object({
   body: z.object({
     tenantId: z.string().min(1),
@@ -257,12 +265,66 @@ export const getRooms = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const updateRoom = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { roomId } = req.params;
+    const { roomNumber, capacity, rentAmount, isAC, bathroomAttached } = req.body;
+
+    const room = await Room.findById(roomId);
+
+    if (!room) {
+      res.status(404).json({ message: 'Room not found' });
+      return;
+    }
+
+    // Store old values for audit log
+    const oldData = {
+      roomNumber: room.roomNumber,
+      capacity: room.capacity,
+      rentAmount: room.rentAmount,
+      isAC: room.isAC,
+      bathroomAttached: room.bathroomAttached
+    };
+
+    // Update fields if provided
+    if (roomNumber !== undefined) room.roomNumber = roomNumber;
+    if (capacity !== undefined) room.capacity = capacity;
+    if (rentAmount !== undefined) room.rentAmount = rentAmount;
+    if (isAC !== undefined) room.isAC = isAC;
+    if (bathroomAttached !== undefined) room.bathroomAttached = bathroomAttached;
+
+    await room.save();
+
+    await logAction(req.user!, 'Room', room._id, 'update', oldData, {
+      roomNumber: room.roomNumber,
+      capacity: room.capacity,
+      rentAmount: room.rentAmount,
+      isAC: room.isAC,
+      bathroomAttached: room.bathroomAttached
+    });
+
+    // Populate hostel details for response
+    const updatedRoom = await Room.findById(roomId).populate('hostelId', 'name address');
+
+    res.json({
+      message: 'Room updated successfully',
+      room: updatedRoom
+    });
+  } catch (error: any) {
+    console.error('Update room error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 export const deleteRoom = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { roomId } = req.params;
 
     const room = await Room.findById(roomId);
-    
+
     if (!room) {
       res.status(404).json({ message: 'Room not found' });
       return;
@@ -275,7 +337,7 @@ export const deleteRoom = async (req: AuthRequest, res: Response): Promise<void>
     });
 
     if (activeTenancies > 0) {
-      res.status(400).json({ 
+      res.status(400).json({
         message: 'Cannot delete room with active tenants. Please remove all tenants first.'
       });
       return;
@@ -300,7 +362,7 @@ export const deleteRoom = async (req: AuthRequest, res: Response): Promise<void>
     });
   } catch (error: any) {
     console.error('Delete room error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: error.message || 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
@@ -400,10 +462,10 @@ export const endTenancy = async (req: AuthRequest, res: Response): Promise<void>
     const { tenancyId } = req.params;
 
     const tenancy = await Tenancy.findById(tenancyId);
-    
+
     if (!tenancy) {
-      res.status(404).json({ 
-        message: 'Tenancy not found' 
+      res.status(404).json({
+        message: 'Tenancy not found'
       });
       return;
     }
@@ -427,7 +489,133 @@ export const endTenancy = async (req: AuthRequest, res: Response): Promise<void>
     });
   } catch (error: any) {
     console.error('End tenancy error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+export const updateTenancy = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenancyId } = req.params;
+    const { roomId, tenantShare, startDate } = req.body;
+
+    const tenancy = await Tenancy.findById(tenancyId);
+
+    if (!tenancy) {
+      res.status(404).json({
+        message: 'Tenancy not found'
+      });
+      return;
+    }
+
+    // Store old values for audit log
+    const oldData = {
+      roomId: tenancy.roomId,
+      tenantShare: tenancy.tenantShare,
+      startDate: tenancy.startDate
+    };
+
+    // Update fields if provided
+    if (roomId !== undefined) {
+      // Validate the new room exists
+      const room = await Room.findById(roomId);
+      if (!room) {
+        res.status(404).json({
+          message: 'Room not found'
+        });
+        return;
+      }
+      tenancy.roomId = roomId as any;
+    }
+
+    if (tenantShare !== undefined) {
+      tenancy.tenantShare = tenantShare;
+    }
+
+    if (startDate !== undefined) {
+      tenancy.startDate = new Date(startDate);
+    }
+
+    await tenancy.save();
+
+    await logAction(req.user!, 'Tenancy', tenancy._id, 'update', oldData, {
+      roomId: tenancy.roomId,
+      tenantShare: tenancy.tenantShare,
+      startDate: tenancy.startDate
+    });
+
+    // Populate the updated tenancy with room and hostel details
+    const updatedTenancy = await Tenancy.findById(tenancyId)
+      .populate({
+        path: 'roomId',
+        populate: {
+          path: 'hostelId'
+        }
+      })
+      .populate('tenantId');
+
+    res.json({
+      message: 'Tenancy updated successfully',
+      tenancy: updatedTenancy
+    });
+  } catch (error: any) {
+    console.error('Update tenancy error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Update tenancy EB bill (admin only)
+export const updateTenancyEBBill = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenancyId } = req.params;
+    const { currentMonthEBBill } = req.body;
+
+    if (currentMonthEBBill === undefined || currentMonthEBBill === null) {
+      res.status(400).json({ message: 'EB bill amount is required' });
+      return;
+    }
+
+    if (currentMonthEBBill < 0) {
+      res.status(400).json({ message: 'EB bill amount cannot be negative' });
+      return;
+    }
+
+    const tenancy = await Tenancy.findById(tenancyId);
+
+    if (!tenancy) {
+      res.status(404).json({ message: 'Tenancy not found' });
+      return;
+    }
+
+    // Store old EB bill for audit log
+    const oldEBBill = tenancy.currentMonthEBBill || 0;
+
+    // Update EB bill
+    tenancy.currentMonthEBBill = currentMonthEBBill;
+    await tenancy.save();
+
+    // Log the change
+    await logAction(
+      req.user!,
+      'Tenancy',
+      tenancyId,
+      'update',
+      { currentMonthEBBill: oldEBBill },
+      { currentMonthEBBill: currentMonthEBBill }
+    );
+
+    res.json({
+      message: 'EB bill updated successfully',
+      currentMonthEBBill: tenancy.currentMonthEBBill
+    });
+  } catch (error: any) {
+    console.error('Update EB bill error:', error);
+    res.status(500).json({
       message: error.message || 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
@@ -639,12 +827,12 @@ export const suggestPaymentAllocations = async (req: AuthRequest, res: Response)
 
 export const getPayments = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { 
-      tenantId, 
-      startDate, 
-      endDate, 
-      page = '1', 
-      limit = '50' 
+    const {
+      tenantId,
+      startDate,
+      endDate,
+      page = '1',
+      limit = '50'
     } = req.query;
 
     const query: any = {};
@@ -682,6 +870,44 @@ export const getPayments = async (req: AuthRequest, res: Response): Promise<void
   } catch (error) {
     console.error('Get payments error:', error);
     res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Delete payment permanently
+export const deletePayment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { paymentId } = req.params;
+
+    const payment = await Payment.findById(paymentId);
+
+    if (!payment) {
+      res.status(404).json({ message: 'Payment not found' });
+      return;
+    }
+
+    // Log the payment data before deleting
+    await logAction(req.user!, 'Payment', payment._id, 'delete', {
+      tenantId: payment.tenantId,
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      paymentDate: payment.paymentDate
+    }, null);
+
+    // Delete all payment allocations associated with this payment
+    await PaymentAllocation.deleteMany({ paymentId: payment._id });
+
+    // Delete the payment record
+    await Payment.findByIdAndDelete(paymentId);
+
+    res.json({
+      message: 'Payment deleted successfully'
+    });
+  } catch (error: any) {
+    console.error('Delete payment error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
@@ -903,6 +1129,64 @@ export const updateTenantProfile = async (req: AuthRequest, res: Response): Prom
   } catch (error: any) {
     console.error('Update tenant profile error:', error);
     res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Update tenant advance amount (admin only)
+export const updateTenantAdvance = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenantId } = req.params;
+    const { advanceAmount } = req.body;
+
+    if (advanceAmount === undefined || advanceAmount === null) {
+      res.status(400).json({ message: 'Advance amount is required' });
+      return;
+    }
+
+    if (advanceAmount < 0) {
+      res.status(400).json({ message: 'Advance amount cannot be negative' });
+      return;
+    }
+
+    const user = await User.findById(tenantId);
+
+    if (!user) {
+      res.status(404).json({ message: 'Tenant not found' });
+      return;
+    }
+
+    if (user.role !== 'tenant') {
+      res.status(400).json({ message: 'Can only update advance for tenants' });
+      return;
+    }
+
+    // Store old advance amount for audit log
+    const oldAdvance = user.advanceAmount || 0;
+
+    // Update advance amount
+    user.advanceAmount = advanceAmount;
+    await user.save();
+
+    // Log the change
+    await logAction(
+      req.user!,
+      'User',
+      tenantId,
+      'update',
+      { advanceAmount: oldAdvance },
+      { advanceAmount: advanceAmount }
+    );
+
+    res.json({
+      message: 'Advance amount updated successfully',
+      advanceAmount: user.advanceAmount
+    });
+  } catch (error: any) {
+    console.error('Update tenant advance error:', error);
+    res.status(500).json({
       message: error.message || 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
@@ -1323,44 +1607,56 @@ export const updateRentPaymentStatus = async (req: AuthRequest, res: Response): 
 // Get dashboard stats
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // Get total hostels
+    const { hostelId } = req.query;
+
+    // Get total hostels (always show all hostels count)
     const totalHostels = await Hostel.countDocuments({ isActive: true });
-    
-    // Get total active tenants
-    const totalTenants = await Tenancy.countDocuments({ isActive: true });
-    
+
+    // Build query for hostel-specific filtering
+    let roomQuery: any = { isActive: true };
+    if (hostelId && hostelId !== 'all') {
+      roomQuery.hostelId = hostelId;
+    }
+
+    // Get rooms based on filter
+    const rooms = await Room.find(roomQuery);
+    const roomIds = rooms.map(room => room._id);
+
+    // Get total active tenants (filtered by hostel if specified)
+    let tenancyQuery: any = { isActive: true };
+    if (hostelId && hostelId !== 'all') {
+      tenancyQuery.roomId = { $in: roomIds };
+    }
+    const totalTenants = await Tenancy.countDocuments(tenancyQuery);
+
     // Calculate monthly revenue (sum of all tenant shares for current month)
-    const currentDate = new Date();
-    const currentPeriod = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}`;
-    
-    const activeTenancies = await Tenancy.find({ isActive: true })
+    const activeTenancies = await Tenancy.find(tenancyQuery)
       .populate('tenantId', 'firstName lastName')
-      .populate('roomId', 'roomNumber capacity rentAmount hostelId')
-      .populate('roomId.hostelId', 'name address');
-    
+      .populate('roomId', 'roomNumber capacity rentAmount hostelId');
+
     let monthlyRevenue = 0;
     activeTenancies.forEach((tenancy: any) => {
       monthlyRevenue += tenancy.tenantShare || 0;
     });
-    
-    // Calculate total room capacity
-    const rooms = await Room.find({ isActive: true });
+
+    // Calculate room statistics
     const totalCapacity = rooms.reduce((sum, room) => sum + room.capacity, 0);
-    
-    // Calculate occupancy rate
-    const occupancyRate = totalCapacity > 0 ? ((totalTenants / totalCapacity) * 100).toFixed(1) : '0';
-    
+    const totalRooms = rooms.length;
+    const occupiedRooms = totalTenants;
+    const freeRooms = totalCapacity - occupiedRooms;
+
     res.json({
       totalHostels,
       totalTenants,
       monthlyRevenue: monthlyRevenue.toFixed(2),
-      occupancyRate: `${occupancyRate}%`,
-      totalRooms: rooms.length,
-      totalCapacity
+      totalRooms,
+      totalCapacity,
+      occupiedRooms,
+      freeRooms
     });
   } catch (error: any) {
     console.error('Get dashboard stats error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: error.message || 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });

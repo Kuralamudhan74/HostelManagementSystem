@@ -124,6 +124,11 @@ class ApiClient {
     return response.data;
   }
 
+  async updateRoom(roomId: string, data: { roomNumber?: string; capacity?: number; rentAmount?: number; isAC?: boolean; bathroomAttached?: boolean }): Promise<{ message: string; room: any }> {
+    const response = await this.client.patch(`/admin/rooms/${roomId}`, data);
+    return response.data;
+  }
+
   async deleteRoom(roomId: string): Promise<{ message: string }> {
     const response = await this.client.delete(`/admin/rooms/${roomId}`);
     return response.data;
@@ -131,6 +136,16 @@ class ApiClient {
 
   async endTenancy(tenancyId: string): Promise<{ message: string; tenancy: any }> {
     const response = await this.client.patch(`/admin/tenancies/${tenancyId}/end`);
+    return response.data;
+  }
+
+  async updateTenancy(tenancyId: string, data: { roomId?: string; tenantShare?: number; startDate?: string }): Promise<{ message: string; tenancy: any }> {
+    const response = await this.client.patch(`/admin/tenancies/${tenancyId}`, data);
+    return response.data;
+  }
+
+  async updateTenancyEBBill(tenancyId: string, currentMonthEBBill: number): Promise<{ message: string; currentMonthEBBill: number }> {
+    const response = await this.client.patch(`/admin/tenancies/${tenancyId}/ebbill`, { currentMonthEBBill });
     return response.data;
   }
 
@@ -164,6 +179,11 @@ class ApiClient {
 
   async updateTenantProfile(tenantId: string, data: any): Promise<{ user: any; message: string }> {
     const response = await this.client.patch(`/admin/tenants/${tenantId}/profile`, data);
+    return response.data;
+  }
+
+  async updateTenantAdvance(tenantId: string, advanceAmount: number): Promise<{ message: string; advanceAmount: number }> {
+    const response = await this.client.patch(`/admin/tenants/${tenantId}/advance`, { advanceAmount });
     return response.data;
   }
 
@@ -214,6 +234,11 @@ class ApiClient {
     const response = await this.client.get('/admin/payments/suggest', {
       params: { tenantId, amount }
     });
+    return response.data;
+  }
+
+  async deletePayment(paymentId: string): Promise<{ message: string }> {
+    const response = await this.client.delete(`/admin/payments/${paymentId}`);
     return response.data;
   }
 
@@ -290,8 +315,10 @@ class ApiClient {
   }
 
   // Dashboard stats
-  async getDashboardStats(): Promise<any> {
-    const response = await this.client.get('/admin/dashboard/stats');
+  async getDashboardStats(hostelId?: string): Promise<any> {
+    const response = await this.client.get('/admin/dashboard/stats', {
+      params: { hostelId }
+    });
     return response.data;
   }
 
