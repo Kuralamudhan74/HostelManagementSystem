@@ -242,6 +242,20 @@ class ApiClient {
     return response.data;
   }
 
+  async updatePayment(paymentId: string, data: {
+    amount?: number;
+    paymentMethod?: string;
+    paymentDate?: string;
+    paymentPeriodStart?: string;
+    paymentPeriodEnd?: string;
+    description?: string;
+    paymentType?: 'full' | 'partial';
+    remainingAmount?: number;
+  }): Promise<{ message: string; payment: any }> {
+    const response = await this.client.patch(`/admin/payments/${paymentId}`, data);
+    return response.data;
+  }
+
   async getExpenseCategories(): Promise<{ categories: any[] }> {
     const response = await this.client.get('/admin/expense-categories');
     return response.data;
@@ -272,6 +286,27 @@ class ApiClient {
     limit?: number;
   }): Promise<{ expenses: any[]; pagination: any }> {
     const response = await this.client.get('/admin/expenses', { params });
+    return response.data;
+  }
+
+  async updateExpense(expenseId: string, data: {
+    hostelId?: string;
+    categoryId?: string;
+    amount?: number;
+    description?: string;
+    expenseDate?: string;
+  }): Promise<{ message: string; expense: any }> {
+    const response = await this.client.patch(`/admin/expenses/${expenseId}`, data);
+    return response.data;
+  }
+
+  async deleteExpense(expenseId: string): Promise<{ message: string }> {
+    const response = await this.client.delete(`/admin/expenses/${expenseId}`);
+    return response.data;
+  }
+
+  async updateHostel(hostelId: string, data: { name?: string; address?: string }): Promise<{ message: string; hostel: any }> {
+    const response = await this.client.patch(`/admin/hostels/${hostelId}`, data);
     return response.data;
   }
 

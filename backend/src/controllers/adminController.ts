@@ -781,6 +781,16 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
       allocations: finalAllocations
     });
 
+    // If payment is marked as "full", set the tenant's current month EB bill to 0
+    // This indicates that when rent is fully paid, EB is also considered paid
+    if (paymentType === 'full') {
+      const activeTenancy = await Tenancy.findOne({ tenantId, isActive: true });
+      if (activeTenancy && (activeTenancy.currentMonthEBBill || 0) > 0) {
+        activeTenancy.currentMonthEBBill = 0;
+        await activeTenancy.save();
+      }
+    }
+
     await logAction(req.user!, 'Payment', payment._id, 'create', null, {
       tenantId,
       amount,
@@ -1903,10 +1913,232 @@ export const getFinancialOverview = async (req: AuthRequest, res: Response): Pro
   }
 };
 
-export { 
-  createHostelSchema, 
-  createRoomSchema, 
-  addTenantToRoomSchema, 
-  recordPaymentSchema, 
-  createExpenseSchema 
+// Update payment
+export const updatePayment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { paymentId } = req.params;
+    const {
+      amount,
+      paymentMethod,
+      paymentDate,
+      paymentPeriodStart,
+      paymentPeriodEnd,
+      description,
+      paymentType,
+      remainingAmount
+    } = req.body;
+
+    const payment = await Payment.findById(paymentId);
+
+    if (!payment) {
+      res.status(404).json({ message: 'Payment not found' });
+      return;
+    }
+
+    // Store old data for audit log
+    const oldData = {
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      paymentDate: payment.paymentDate,
+      paymentPeriodStart: payment.paymentPeriodStart,
+      paymentPeriodEnd: payment.paymentPeriodEnd,
+      description: payment.description,
+      paymentType: payment.paymentType,
+      remainingAmount: payment.remainingAmount
+    };
+
+    // Update fields
+    if (amount !== undefined) payment.amount = amount;
+    if (paymentMethod !== undefined) payment.paymentMethod = paymentMethod;
+    if (paymentDate !== undefined) payment.paymentDate = new Date(paymentDate);
+    if (paymentPeriodStart !== undefined) payment.paymentPeriodStart = new Date(paymentPeriodStart);
+    if (paymentPeriodEnd !== undefined) payment.paymentPeriodEnd = new Date(paymentPeriodEnd);
+    if (description !== undefined) payment.description = description;
+    if (paymentType !== undefined) payment.paymentType = paymentType;
+    if (remainingAmount !== undefined) payment.remainingAmount = remainingAmount;
+
+    await payment.save();
+
+    // If payment type is changed to "full", set the tenant's current month EB bill to 0
+    if (paymentType === 'full') {
+      const activeTenancy = await Tenancy.findOne({ tenantId: payment.tenantId, isActive: true });
+      if (activeTenancy && (activeTenancy.currentMonthEBBill || 0) > 0) {
+        activeTenancy.currentMonthEBBill = 0;
+        await activeTenancy.save();
+      }
+    }
+
+    // Log the update
+    await logAction(req.user!, 'Payment', payment._id, 'update', oldData, {
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      paymentDate: payment.paymentDate,
+      paymentPeriodStart: payment.paymentPeriodStart,
+      paymentPeriodEnd: payment.paymentPeriodEnd,
+      description: payment.description,
+      paymentType: payment.paymentType,
+      remainingAmount: payment.remainingAmount
+    });
+
+    // Populate tenant info for response
+    const populatedPayment = await Payment.findById(paymentId)
+      .populate('tenantId', 'firstName lastName email');
+
+    res.json({
+      message: 'Payment updated successfully',
+      payment: populatedPayment
+    });
+  } catch (error: any) {
+    console.error('Update payment error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Update expense
+export const updateExpense = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { expenseId } = req.params;
+    const { hostelId, categoryId, amount, description, expenseDate } = req.body;
+
+    const expense = await Expense.findById(expenseId);
+
+    if (!expense) {
+      res.status(404).json({ message: 'Expense not found' });
+      return;
+    }
+
+    // Store old data for audit log
+    const oldData = {
+      hostelId: expense.hostelId,
+      categoryId: expense.categoryId,
+      amount: expense.amount,
+      description: expense.description,
+      expenseDate: expense.expenseDate
+    };
+
+    // Update fields
+    if (hostelId !== undefined) expense.hostelId = hostelId;
+    if (categoryId !== undefined) expense.categoryId = categoryId;
+    if (amount !== undefined) expense.amount = amount;
+    if (description !== undefined) expense.description = description;
+    if (expenseDate !== undefined) expense.expenseDate = new Date(expenseDate);
+
+    await expense.save();
+
+    // Log the update
+    await logAction(req.user!, 'Expense', expense._id, 'update', oldData, {
+      hostelId: expense.hostelId,
+      categoryId: expense.categoryId,
+      amount: expense.amount,
+      description: expense.description,
+      expenseDate: expense.expenseDate
+    });
+
+    // Populate hostel and category info for response
+    const populatedExpense = await Expense.findById(expenseId)
+      .populate('hostelId', 'name address')
+      .populate('categoryId', 'name description');
+
+    res.json({
+      message: 'Expense updated successfully',
+      expense: populatedExpense
+    });
+  } catch (error: any) {
+    console.error('Update expense error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Delete expense
+export const deleteExpense = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { expenseId } = req.params;
+
+    const expense = await Expense.findById(expenseId);
+
+    if (!expense) {
+      res.status(404).json({ message: 'Expense not found' });
+      return;
+    }
+
+    // Log the expense data before deleting
+    await logAction(req.user!, 'Expense', expense._id, 'delete', {
+      hostelId: expense.hostelId,
+      categoryId: expense.categoryId,
+      amount: expense.amount,
+      description: expense.description,
+      expenseDate: expense.expenseDate
+    }, null);
+
+    // Delete the expense record
+    await Expense.findByIdAndDelete(expenseId);
+
+    res.json({
+      message: 'Expense deleted successfully'
+    });
+  } catch (error: any) {
+    console.error('Delete expense error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Update hostel
+export const updateHostel = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { hostelId } = req.params;
+    const { name, address } = req.body;
+
+    const hostel = await Hostel.findById(hostelId);
+
+    if (!hostel) {
+      res.status(404).json({ message: 'Hostel not found' });
+      return;
+    }
+
+    // Store old data for audit log
+    const oldData = {
+      name: hostel.name,
+      address: hostel.address
+    };
+
+    // Update fields
+    if (name !== undefined) hostel.name = name;
+    if (address !== undefined) hostel.address = address;
+
+    await hostel.save();
+
+    // Log the update
+    await logAction(req.user!, 'Hostel', hostel._id, 'update', oldData, {
+      name: hostel.name,
+      address: hostel.address
+    });
+
+    res.json({
+      message: 'Hostel updated successfully',
+      hostel
+    });
+  } catch (error: any) {
+    console.error('Update hostel error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+export {
+  createHostelSchema,
+  createRoomSchema,
+  addTenantToRoomSchema,
+  recordPaymentSchema,
+  createExpenseSchema
 };

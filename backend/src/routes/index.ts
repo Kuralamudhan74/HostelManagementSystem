@@ -92,6 +92,10 @@ router.get('/admin/financial-overview', authenticate, requireAdmin, async (req, 
 });
 router.post('/admin/hostels', authenticate, requireAdmin, validate(createHostelSchema), createHostel);
 router.get('/admin/hostels', authenticate, requireAdmin, getHostels);
+router.patch('/admin/hostels/:hostelId', authenticate, requireAdmin, async (req, res, next) => {
+  const { updateHostel } = await import('../controllers/adminController');
+  return updateHostel(req as any, res);
+});
 router.delete('/admin/hostels/:hostelId', authenticate, requireAdmin, async (req, res, next) => {
   const { deleteHostel } = await import('../controllers/adminController');
   return deleteHostel(req as any, res);
@@ -149,9 +153,21 @@ router.post('/admin/payments', authenticate, requireAdmin, validate(recordPaymen
 router.get('/admin/payments', authenticate, requireAdmin, getPayments);
 router.get('/admin/payments/suggest', authenticate, requireAdmin, suggestPaymentAllocations);
 router.delete('/admin/payments/:paymentId', authenticate, requireAdmin, deletePayment);
+router.patch('/admin/payments/:paymentId', authenticate, requireAdmin, async (req, res, next) => {
+  const { updatePayment } = await import('../controllers/adminController');
+  return updatePayment(req as any, res);
+});
 
 router.post('/admin/expenses', authenticate, requireAdmin, validate(createExpenseSchema), createExpense);
 router.get('/admin/expenses', authenticate, requireAdmin, getExpenses);
+router.patch('/admin/expenses/:expenseId', authenticate, requireAdmin, async (req, res, next) => {
+  const { updateExpense } = await import('../controllers/adminController');
+  return updateExpense(req as any, res);
+});
+router.delete('/admin/expenses/:expenseId', authenticate, requireAdmin, async (req, res, next) => {
+  const { deleteExpense } = await import('../controllers/adminController');
+  return deleteExpense(req as any, res);
+});
 router.get('/admin/expense-categories', authenticate, requireAdmin, getExpenseCategories);
 router.post('/admin/expense-categories', authenticate, requireAdmin, createExpenseCategory);
 

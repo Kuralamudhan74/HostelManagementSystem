@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, ArrowLeft, Plus, Calendar, Building2, Tag, Download } from 'lucide-react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { FileText, ArrowLeft, Plus, Calendar, Building2, Tag, Download, Edit2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -30,6 +30,10 @@ const PaymentsPage: React.FC = () => {
   
   const [isRecordExpenseModalOpen, setIsRecordExpenseModalOpen] = useState(false);
   const [isCreateCategoryModalOpen, setIsCreateCategoryModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [expenseToEdit, setExpenseToEdit] = useState<any>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<any>(null);
   const [filterHostelId, setFilterHostelId] = useState<string>('');
   const [filterCategoryId, setFilterCategoryId] = useState<string>('');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
@@ -141,6 +145,83 @@ const PaymentsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['expense-categories'] });
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to create category');
+    }
+  };
+
+  // Edit form state
+  const [editFormData, setEditFormData] = useState({
+    hostelId: '',
+    categoryId: '',
+    amount: 0,
+    description: '',
+    expenseDate: '',
+  });
+
+  // Update expense mutation
+  const updateExpenseMutation = useMutation({
+    mutationFn: ({ expenseId, data }: { expenseId: string; data: any }) => apiClient.updateExpense(expenseId, data),
+    onSuccess: () => {
+      toast.success('Expense updated successfully');
+      setIsEditModalOpen(false);
+      setExpenseToEdit(null);
+      queryClient.invalidateQueries({ queryKey: ['admin/expenses'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update expense');
+    },
+  });
+
+  // Delete expense mutation
+  const deleteExpenseMutation = useMutation({
+    mutationFn: (expenseId: string) => apiClient.deleteExpense(expenseId),
+    onSuccess: () => {
+      toast.success('Expense deleted successfully');
+      setIsDeleteModalOpen(false);
+      setExpenseToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['admin/expenses'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to delete expense');
+    },
+  });
+
+  const handleEditClick = (expense: any) => {
+    setExpenseToEdit(expense);
+    setEditFormData({
+      hostelId: expense.hostelId?._id || expense.hostelId || '',
+      categoryId: expense.categoryId?._id || expense.categoryId || '',
+      amount: expense.amount || 0,
+      description: expense.description || '',
+      expenseDate: expense.expenseDate ? new Date(expense.expenseDate).toISOString().split('T')[0] : '',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleDeleteClick = (expense: any) => {
+    setExpenseToDelete(expense);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleUpdateExpense = () => {
+    if (!expenseToEdit) return;
+
+    const updateData = {
+      hostelId: editFormData.hostelId,
+      categoryId: editFormData.categoryId,
+      amount: Number(editFormData.amount),
+      description: editFormData.description,
+      expenseDate: new Date(editFormData.expenseDate).toISOString(),
+    };
+
+    updateExpenseMutation.mutate({
+      expenseId: expenseToEdit.id || expenseToEdit._id,
+      data: updateData
+    });
+  };
+
+  const handleConfirmDelete = () => {
+    if (expenseToDelete) {
+      deleteExpenseMutation.mutate(expenseToDelete.id || expenseToDelete._id);
     }
   };
 
@@ -313,6 +394,9 @@ const PaymentsPage: React.FC = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Amount
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -354,6 +438,24 @@ const PaymentsPage: React.FC = () => {
                           <span className="text-sm font-semibold text-red-600">
                             {formatCurrency(expense.amount)}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleEditClick(expense)}
+                              className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                              title="Edit expense"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(expense)}
+                              className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                              title="Delete expense"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </motion.tr>
                     ))}
@@ -537,6 +639,170 @@ const PaymentsPage: React.FC = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Edit Expense Modal */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setExpenseToEdit(null);
+        }}
+        title="Edit Expense"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Hostel *
+            </label>
+            <select
+              value={editFormData.hostelId}
+              onChange={(e) => setEditFormData({ ...editFormData, hostelId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select a hostel</option>
+              {hostelsData?.hostels?.map((hostel: any) => (
+                <option key={hostel.id || hostel._id} value={hostel.id || hostel._id}>
+                  {hostel.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Category *
+            </label>
+            <select
+              value={editFormData.categoryId}
+              onChange={(e) => setEditFormData({ ...editFormData, categoryId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select a category</option>
+              {categoriesData?.categories?.map((category: any) => (
+                <option key={category.id || category._id} value={category.id || category._id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Amount (₹) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={editFormData.amount}
+              onChange={(e) => setEditFormData({ ...editFormData, amount: Number(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              placeholder="0.00"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description *
+            </label>
+            <textarea
+              value={editFormData.description}
+              onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter expense description"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Expense Date *
+            </label>
+            <input
+              type="date"
+              value={editFormData.expenseDate}
+              onChange={(e) => setEditFormData({ ...editFormData, expenseDate: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsEditModalOpen(false);
+                setExpenseToEdit(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleUpdateExpense}
+              disabled={updateExpenseMutation.isPending}
+            >
+              {updateExpenseMutation.isPending ? 'Updating...' : 'Update Expense'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Expense Modal */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setExpenseToDelete(null);
+        }}
+        title="Delete Expense"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-700">
+            Are you sure you want to delete this expense record?
+          </p>
+          {expenseToDelete && (
+            <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
+              <div className="space-y-2">
+                <p className="text-sm text-gray-700">
+                  <span className="font-medium">Hostel:</span> {expenseToDelete.hostelId?.name || 'N/A'}
+                </p>
+                <p className="text-sm text-gray-700">
+                  <span className="font-medium">Category:</span> {expenseToDelete.categoryId?.name || 'N/A'}
+                </p>
+                <p className="text-sm text-gray-700">
+                  <span className="font-medium">Amount:</span> {formatCurrency(expenseToDelete.amount)}
+                </p>
+                <p className="text-sm text-gray-700">
+                  <span className="font-medium">Description:</span> {expenseToDelete.description}
+                </p>
+              </div>
+            </div>
+          )}
+          <div className="bg-red-50 border border-red-200 rounded-md p-4">
+            <p className="text-sm text-red-800">
+              <strong>Warning:</strong> This action cannot be undone. The expense record will be permanently deleted.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setExpenseToDelete(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleConfirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={deleteExpenseMutation.isPending}
+            >
+              {deleteExpenseMutation.isPending ? 'Deleting...' : 'Delete Expense'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

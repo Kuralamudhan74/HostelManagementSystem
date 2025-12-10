@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { 
-  Building2, 
-  Users, 
-  DollarSign, 
+import {
+  Building2,
+  Users,
+  DollarSign,
   TrendingUp,
   FileText,
   Settings,
   Plus,
   Trash2,
-  User
+  User,
+  Edit2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import apiClient from '../../services/api';
@@ -27,10 +28,13 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
 
   const [isAddHostelModalOpen, setIsAddHostelModalOpen] = useState(false);
+  const [isEditHostelModalOpen, setIsEditHostelModalOpen] = useState(false);
   const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
   const [selectedHostel, setSelectedHostel] = useState<any>(null);
   const [hostelName, setHostelName] = useState('');
   const [hostelAddress, setHostelAddress] = useState('');
+  const [editHostelName, setEditHostelName] = useState('');
+  const [editHostelAddress, setEditHostelAddress] = useState('');
   const [selectedHostelFilter, setSelectedHostelFilter] = useState<string>('all');
 
   const { data: hostels, isLoading: hostelsLoading } = useQuery({
@@ -77,10 +81,49 @@ const AdminDashboard: React.FC = () => {
     });
   };
 
+  // Update hostel mutation
+  const updateHostelMutation = useMutation({
+    mutationFn: ({ hostelId, data }: { hostelId: string; data: { name?: string; address?: string } }) =>
+      apiClient.updateHostel(hostelId, data),
+    onSuccess: () => {
+      toast.success('Hostel updated successfully');
+      setIsEditHostelModalOpen(false);
+      setSelectedHostel(null);
+      setEditHostelName('');
+      setEditHostelAddress('');
+      queryClient.invalidateQueries({ queryKey: ['hostels'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update hostel');
+    },
+  });
+
+  const handleEditClick = (hostel: any) => {
+    setSelectedHostel(hostel);
+    setEditHostelName(hostel.name || '');
+    setEditHostelAddress(hostel.address || '');
+    setIsEditHostelModalOpen(true);
+  };
+
+  const handleUpdateHostel = () => {
+    if (!selectedHostel || !editHostelName.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    updateHostelMutation.mutate({
+      hostelId: selectedHostel.id || selectedHostel._id,
+      data: {
+        name: editHostelName,
+        address: editHostelAddress
+      }
+    });
+  };
+
   const handleDeleteClick = (hostel: any) => {
     // Check if hostel has any tenants
     const hostelHasTenants = checkHostelHasTenants(hostel);
-    
+
     if (hostelHasTenants) {
       toast.error('Cannot delete hostel with active tenants. Please reassign or remove tenants first.');
       return;
@@ -383,6 +426,13 @@ const AdminDashboard: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-green-600 font-medium">Active</span>
                     <button
+                      onClick={() => handleEditClick(hostel)}
+                      className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded"
+                      title="Edit hostel"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => handleDeleteClick(hostel)}
                       className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
                       title="Delete hostel"
@@ -491,6 +541,67 @@ const AdminDashboard: React.FC = () => {
               className="bg-red-600 hover:bg-red-700"
             >
               Delete Hostel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Hostel Modal */}
+      <Modal
+        isOpen={isEditHostelModalOpen}
+        onClose={() => {
+          setIsEditHostelModalOpen(false);
+          setSelectedHostel(null);
+          setEditHostelName('');
+          setEditHostelAddress('');
+        }}
+        title="Edit Hostel"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Hostel Name *
+            </label>
+            <input
+              type="text"
+              value={editHostelName}
+              onChange={(e) => setEditHostelName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter hostel name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Address
+            </label>
+            <textarea
+              value={editHostelAddress}
+              onChange={(e) => setEditHostelAddress(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter hostel address"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsEditHostelModalOpen(false);
+                setSelectedHostel(null);
+                setEditHostelName('');
+                setEditHostelAddress('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleUpdateHostel}
+              disabled={updateHostelMutation.isPending}
+            >
+              {updateHostelMutation.isPending ? 'Updating...' : 'Update Hostel'}
             </Button>
           </div>
         </div>

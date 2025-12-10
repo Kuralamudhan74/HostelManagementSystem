@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { DollarSign, ArrowLeft, Plus, Calendar, User, Trash2 } from 'lucide-react';
+import { DollarSign, ArrowLeft, Plus, Calendar, User, Trash2, Edit2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Button from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -69,6 +69,8 @@ const PaymentsPage: React.FC = () => {
   const [filterEndDate, setFilterEndDate] = useState<string>('');
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<any>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [paymentToEdit, setPaymentToEdit] = useState<any>(null);
 
   // Debounced filter values
   const [debouncedFilterTenantId, setDebouncedFilterTenantId] = useState<string>('');
@@ -255,6 +257,74 @@ const PaymentsPage: React.FC = () => {
       toast.error(error.response?.data?.message || 'Failed to delete payment');
     },
   });
+
+  // Update payment mutation
+  const updatePaymentMutation = useMutation({
+    mutationFn: ({ paymentId, data }: { paymentId: string; data: any }) => apiClient.updatePayment(paymentId, data),
+    onSuccess: () => {
+      toast.success('Payment updated successfully');
+      setIsEditModalOpen(false);
+      setPaymentToEdit(null);
+      queryClient.invalidateQueries({ queryKey: ['admin/payments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin/payments/all'] });
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update payment');
+    },
+  });
+
+  // Edit form state
+  const [editFormData, setEditFormData] = useState({
+    amount: 0,
+    paymentMethod: 'cash',
+    paymentDate: '',
+    paymentPeriodStart: '',
+    paymentPeriodEnd: '',
+    description: '',
+    paymentType: 'full' as 'full' | 'partial',
+    remainingAmount: 0,
+  });
+
+  const handleEditClick = (payment: any) => {
+    setPaymentToEdit(payment);
+    setEditFormData({
+      amount: payment.amount || 0,
+      paymentMethod: payment.paymentMethod || 'cash',
+      paymentDate: payment.paymentDate ? new Date(payment.paymentDate).toISOString().split('T')[0] : '',
+      paymentPeriodStart: payment.paymentPeriodStart ? new Date(payment.paymentPeriodStart).toISOString().split('T')[0] : '',
+      paymentPeriodEnd: payment.paymentPeriodEnd ? new Date(payment.paymentPeriodEnd).toISOString().split('T')[0] : '',
+      description: payment.description || '',
+      paymentType: payment.paymentType || 'full',
+      remainingAmount: payment.remainingAmount || 0,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdatePayment = () => {
+    if (!paymentToEdit) return;
+
+    const updateData: any = {
+      amount: Number(editFormData.amount),
+      paymentMethod: editFormData.paymentMethod,
+      paymentDate: new Date(editFormData.paymentDate).toISOString(),
+      description: editFormData.description,
+      paymentType: editFormData.paymentType,
+      remainingAmount: editFormData.paymentType === 'partial' ? Number(editFormData.remainingAmount) : 0,
+    };
+
+    if (editFormData.paymentPeriodStart) {
+      updateData.paymentPeriodStart = new Date(editFormData.paymentPeriodStart).toISOString();
+    }
+    if (editFormData.paymentPeriodEnd) {
+      updateData.paymentPeriodEnd = new Date(editFormData.paymentPeriodEnd).toISOString();
+    }
+
+    updatePaymentMutation.mutate({
+      paymentId: paymentToEdit.id || paymentToEdit._id,
+      data: updateData
+    });
+  };
 
   const handleDeleteClick = (payment: any) => {
     setPaymentToDelete(payment);
@@ -523,13 +593,22 @@ const PaymentsPage: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <button
-                            onClick={() => handleDeleteClick(payment)}
-                            className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                            title="Delete payment"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleEditClick(payment)}
+                              className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                              title="Edit payment"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(payment)}
+                              className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                              title="Delete payment"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </motion.tr>
                     ))}
@@ -914,6 +993,170 @@ const PaymentsPage: React.FC = () => {
               disabled={deletePaymentMutation.isPending}
             >
               {deletePaymentMutation.isPending ? 'Deleting...' : 'Delete Payment'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Payment Modal */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setPaymentToEdit(null);
+        }}
+        title="Edit Payment"
+      >
+        <div className="space-y-4">
+          {paymentToEdit && (
+            <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
+              <p className="text-sm text-gray-700">
+                <span className="font-medium">Tenant:</span> {paymentToEdit.tenantId?.firstName} {paymentToEdit.tenantId?.lastName}
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Amount (₹) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={editFormData.amount}
+              onChange={(e) => setEditFormData({ ...editFormData, amount: Number(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              placeholder="0.00"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Payment Type *
+            </label>
+            <div className="flex gap-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="full"
+                  checked={editFormData.paymentType === 'full'}
+                  onChange={() => setEditFormData({ ...editFormData, paymentType: 'full', remainingAmount: 0 })}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">Fully Paid</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="partial"
+                  checked={editFormData.paymentType === 'partial'}
+                  onChange={() => setEditFormData({ ...editFormData, paymentType: 'partial' })}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">Partially Paid</span>
+              </label>
+            </div>
+          </div>
+
+          {editFormData.paymentType === 'partial' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Remaining Payment (₹) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={editFormData.remainingAmount}
+                onChange={(e) => setEditFormData({ ...editFormData, remainingAmount: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                placeholder="0.00"
+                min="0"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Payment Method *
+            </label>
+            <select
+              value={editFormData.paymentMethod}
+              onChange={(e) => setEditFormData({ ...editFormData, paymentMethod: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="cash">Cash</option>
+              <option value="bank_transfer">Bank Transfer</option>
+              <option value="cheque">Cheque</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Payment Date *
+            </label>
+            <input
+              type="date"
+              value={editFormData.paymentDate}
+              onChange={(e) => setEditFormData({ ...editFormData, paymentDate: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Period Start
+              </label>
+              <input
+                type="date"
+                value={editFormData.paymentPeriodStart}
+                onChange={(e) => setEditFormData({ ...editFormData, paymentPeriodStart: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Period End
+              </label>
+              <input
+                type="date"
+                value={editFormData.paymentPeriodEnd}
+                onChange={(e) => setEditFormData({ ...editFormData, paymentPeriodEnd: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={editFormData.description}
+              onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              placeholder="Optional description"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsEditModalOpen(false);
+                setPaymentToEdit(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleUpdatePayment}
+              disabled={updatePaymentMutation.isPending}
+            >
+              {updatePaymentMutation.isPending ? 'Updating...' : 'Update Payment'}
             </Button>
           </div>
         </div>
