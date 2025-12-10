@@ -83,6 +83,7 @@ export interface Tenancy {
   endDate?: string;
   tenantShare?: number;
   currentMonthEBBill?: number;
+  previousRentDue?: number; // Accumulated unpaid rent from previous months
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

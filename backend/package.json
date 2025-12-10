@@ -9,7 +9,8 @@
     "start": "node dist/app.js",
     "test": "jest",
     "seed": "ts-node src/scripts/seed.ts",
-    "generate-rent": "ts-node src/scripts/generateRent.ts"
+    "generate-rent": "ts-node src/scripts/generateRent.ts",
+    "init-previous-rent": "ts-node src/scripts/initializePreviousRentDue.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

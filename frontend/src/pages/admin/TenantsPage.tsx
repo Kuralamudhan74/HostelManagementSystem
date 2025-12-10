@@ -73,6 +73,8 @@ const TenantsPage: React.FC = () => {
   const [editAdvanceAmount, setEditAdvanceAmount] = useState<number>(0);
   const [isEditEBBillModalOpen, setIsEditEBBillModalOpen] = useState(false);
   const [editEBBillAmount, setEditEBBillAmount] = useState<number>(0);
+  const [isEditPreviousRentDueModalOpen, setIsEditPreviousRentDueModalOpen] = useState(false);
+  const [editPreviousRentDueAmount, setEditPreviousRentDueAmount] = useState<number>(0);
 
   const [searchParams, setSearchParams] = useState({
     search: '',
@@ -227,6 +229,21 @@ const TenantsPage: React.FC = () => {
     },
   });
 
+  // Update previous rent due mutation
+  const updatePreviousRentDueMutation = useMutation({
+    mutationFn: ({ tenancyId, previousRentDue }: { tenancyId: string; previousRentDue: number }) =>
+      apiClient.updateTenancyPreviousRentDue(tenancyId, previousRentDue),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Previous rent due updated successfully');
+      setIsEditPreviousRentDueModalOpen(false);
+      setSelectedTenancy(null);
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update previous rent due');
+    },
+  });
+
   // Update tenancy mutation
   const updateTenancyMutation = useMutation({
     mutationFn: ({ tenancyId, data }: { tenancyId: string; data: any }) =>
@@ -346,6 +363,14 @@ const TenantsPage: React.FC = () => {
 
     const tenancyId = selectedTenancy._id || selectedTenancy.id;
     updateEBBillMutation.mutate({ tenancyId, currentMonthEBBill: editEBBillAmount });
+  };
+
+  const handleUpdatePreviousRentDue = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenancy) return;
+
+    const tenancyId = selectedTenancy._id || selectedTenancy.id;
+    updatePreviousRentDueMutation.mutate({ tenancyId, previousRentDue: editPreviousRentDueAmount });
   };
 
   const handleEditTenancyClick = (tenancy: any) => {
@@ -945,8 +970,8 @@ const TenantsPage: React.FC = () => {
                       <span>Room {tenancy.roomId?.roomNumber || 'N/A'}</span>
                     )}
                   </div>
-                  {/* Food Preference Display */}
-                  <div className="flex items-center text-sm">
+                  {/* Food Preference and AC Room Display */}
+                  <div className="flex items-center text-sm gap-2 flex-wrap">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       tenancy.withFood
                         ? 'bg-green-100 text-green-800'
@@ -954,6 +979,11 @@ const TenantsPage: React.FC = () => {
                     }`}>
                       {tenancy.withFood ? '🍽️ With Food' : 'Without Food'}
                     </span>
+                    {tenancy.roomId?.isAC && (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        ❄️ AC
+                      </span>
+                    )}
                   </div>
                   {/* Rent Period and Payment Status */}
                   {rentPeriodInfo && paymentStatusInfo && (
@@ -1010,11 +1040,39 @@ const TenantsPage: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Previous Rent Due Section */}
+                  {(tenancy.previousRentDue || 0) > 0 && (
+                    <div className="bg-red-50 border border-red-300 rounded-md p-2 mb-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-red-900 font-medium">
+                          Previous Rent Due: <span className="font-bold">{formatCurrency(tenancy.previousRentDue || 0)}</span>
+                        </p>
+                        <button
+                          onClick={() => {
+                            setSelectedTenancy(tenancy);
+                            setIsEditPreviousRentDueModalOpen(true);
+                            setEditPreviousRentDueAmount(tenancy.previousRentDue || 0);
+                          }}
+                          className="p-1 text-red-700 hover:text-red-900 hover:bg-red-100 rounded transition-colors"
+                          title="Edit Previous Rent Due"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <p className="text-xs text-red-700 mt-1">Accumulated from previous months</p>
+                    </div>
+                  )}
+
                   {/* Total for Month */}
                   <div className="bg-blue-50 border border-blue-200 rounded-md p-2 mb-2">
                     <p className="text-xs text-blue-900 font-medium">
                       Total for Month: <span className="font-bold">{formatCurrency((tenancy.tenantShare || 0) + (tenancy.currentMonthEBBill || 0))}</span>
                     </p>
+                    {(tenancy.previousRentDue || 0) > 0 && (
+                      <p className="text-xs text-red-700 mt-1">
+                        + Previous Due: <span className="font-bold">{formatCurrency(tenancy.previousRentDue || 0)}</span> = <span className="font-bold">{formatCurrency((tenancy.tenantShare || 0) + (tenancy.currentMonthEBBill || 0) + (tenancy.previousRentDue || 0))}</span>
+                      </p>
+                    )}
                   </div>
 
                   {tenancy.tenantId?.advanceAmount && tenancy.tenantId.advanceAmount > 0 && (
@@ -2323,6 +2381,83 @@ const TenantsPage: React.FC = () => {
               disabled={updateEBBillMutation.isPending}
             >
               {updateEBBillMutation.isPending ? 'Updating...' : 'Update EB Bill'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Previous Rent Due Modal */}
+      <Modal
+        isOpen={isEditPreviousRentDueModalOpen}
+        onClose={() => {
+          setIsEditPreviousRentDueModalOpen(false);
+          setEditPreviousRentDueAmount(0);
+          setSelectedTenancy(null);
+        }}
+        title="Edit Previous Rent Due"
+        size="md"
+      >
+        <form onSubmit={handleUpdatePreviousRentDue} className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-red-900">
+              <strong>Note:</strong> This is the accumulated unpaid rent from previous months.
+              This amount is automatically updated when new months start and previous rent is not fully paid.
+              You can manually adjust this value if needed.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Previous Rent Due Amount (₹) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={editPreviousRentDueAmount}
+              onChange={(e) => setEditPreviousRentDueAmount(parseFloat(e.target.value) || 0)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500"
+              placeholder="0.00"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Enter the total unpaid rent accumulated from previous months (set to 0 to clear)
+            </p>
+          </div>
+
+          {selectedTenancy && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+              <p className="text-xs text-blue-900 mb-1">
+                <strong>Current Month Rent:</strong> {formatCurrency(selectedTenancy.tenantShare || 0)}
+              </p>
+              <p className="text-xs text-blue-900 mb-1">
+                <strong>Current Month EB:</strong> {formatCurrency(selectedTenancy.currentMonthEBBill || 0)}
+              </p>
+              <p className="text-xs text-red-900 font-bold">
+                <strong>Total Due (including previous):</strong> {formatCurrency((selectedTenancy.tenantShare || 0) + (selectedTenancy.currentMonthEBBill || 0) + editPreviousRentDueAmount)}
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsEditPreviousRentDueModalOpen(false);
+                setEditPreviousRentDueAmount(0);
+                setSelectedTenancy(null);
+              }}
+              disabled={updatePreviousRentDueMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={updatePreviousRentDueMutation.isPending}
+            >
+              {updatePreviousRentDueMutation.isPending ? 'Updating...' : 'Update Previous Rent Due'}
             </Button>
           </div>
         </form>

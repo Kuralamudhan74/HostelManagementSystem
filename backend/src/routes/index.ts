@@ -119,6 +119,10 @@ router.patch('/admin/tenancies/:tenancyId', authenticate, requireAdmin, async (r
   return updateTenancy(req as any, res);
 });
 router.patch('/admin/tenancies/:tenancyId/ebbill', authenticate, requireAdmin, updateTenancyEBBill);
+router.patch('/admin/tenancies/:tenancyId/previous-rent-due', authenticate, requireAdmin, async (req, res, next) => {
+  const { updateTenancyPreviousRentDue } = await import('../controllers/adminController');
+  return updateTenancyPreviousRentDue(req as any, res);
+});
 router.post('/admin/tenants', authenticate, requireAdmin, async (req, res, next) => {
   const { createTenant } = await import('../controllers/adminController');
   return createTenant(req as any, res);

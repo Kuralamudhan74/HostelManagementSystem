@@ -622,6 +622,59 @@ export const updateTenancyEBBill = async (req: AuthRequest, res: Response): Prom
   }
 };
 
+// Update tenancy previous rent due (admin only)
+export const updateTenancyPreviousRentDue = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tenancyId } = req.params;
+    const { previousRentDue } = req.body;
+
+    if (previousRentDue === undefined || previousRentDue === null) {
+      res.status(400).json({ message: 'Previous rent due amount is required' });
+      return;
+    }
+
+    if (previousRentDue < 0) {
+      res.status(400).json({ message: 'Previous rent due amount cannot be negative' });
+      return;
+    }
+
+    const tenancy = await Tenancy.findById(tenancyId);
+
+    if (!tenancy) {
+      res.status(404).json({ message: 'Tenancy not found' });
+      return;
+    }
+
+    // Store old previous rent due for audit log
+    const oldPreviousRentDue = tenancy.previousRentDue || 0;
+
+    // Update previous rent due
+    tenancy.previousRentDue = previousRentDue;
+    await tenancy.save();
+
+    // Log the change
+    await logAction(
+      req.user!,
+      'Tenancy',
+      tenancyId,
+      'update',
+      { previousRentDue: oldPreviousRentDue },
+      { previousRentDue: previousRentDue }
+    );
+
+    res.json({
+      message: 'Previous rent due updated successfully',
+      previousRentDue: tenancy.previousRentDue
+    });
+  } catch (error: any) {
+    console.error('Update previous rent due error:', error);
+    res.status(500).json({
+      message: error.message || 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 export const getTenants = async (req: AuthRequest, res: Response) => {
   try {
     const { 
@@ -672,7 +725,7 @@ export const getTenants = async (req: AuthRequest, res: Response) => {
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
     const tenancies = await Tenancy.find(query)
-      .populate('roomId', 'roomNumber hostelId')
+      .populate('roomId', 'roomNumber hostelId isAC bathroomAttached')
       .populate({
         path: 'tenantId',
         select: '-password' // Include all fields except password

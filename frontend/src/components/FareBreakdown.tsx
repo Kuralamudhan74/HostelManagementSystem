@@ -1,5 +1,5 @@
 import React from 'react';
-import { Receipt, Calendar, Zap, DollarSign, CheckCircle } from 'lucide-react';
+import { Receipt, Calendar, Zap, DollarSign, CheckCircle, AlertTriangle } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
 interface FareBreakdownProps {
@@ -9,6 +9,7 @@ interface FareBreakdownProps {
   status: 'due' | 'partial' | 'paid';
   totalRoomEB?: number;
   roommatesCount?: number;
+  previousRentDue?: number; // Accumulated unpaid rent from previous months
 }
 
 const FareBreakdown: React.FC<FareBreakdownProps> = ({
@@ -17,10 +18,12 @@ const FareBreakdown: React.FC<FareBreakdownProps> = ({
   amountPaid,
   status,
   totalRoomEB,
-  roommatesCount
+  roommatesCount,
+  previousRentDue = 0
 }) => {
   const baseRent = monthlyRent; // This is the base rent from tenancy
-  const totalDue = baseRent + ebBillShare;
+  const currentMonthDue = baseRent + ebBillShare;
+  const totalDue = currentMonthDue + previousRentDue; // Include previous rent in total
   const remaining = totalDue - amountPaid;
 
   return (
@@ -49,6 +52,24 @@ const FareBreakdown: React.FC<FareBreakdownProps> = ({
       </div>
 
       <div className="bg-white bg-opacity-10 rounded-lg p-6">
+        {/* Previous Rent Due Alert - Show only if there's previous unpaid rent */}
+        {previousRentDue > 0 && (
+          <div className="bg-red-500 bg-opacity-30 border border-red-400 rounded-lg p-4 mb-4">
+            <div className="flex items-center">
+              <AlertTriangle className="w-5 h-5 text-red-200 mr-2" />
+              <div>
+                <p className="text-white font-semibold">Previous Rent Due</p>
+                <p className="text-red-100 text-sm">
+                  You have {formatCurrency(previousRentDue)} unpaid rent from previous months
+                </p>
+              </div>
+              <div className="ml-auto">
+                <p className="text-2xl font-bold text-white">{formatCurrency(previousRentDue)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
           <div>
             <p className="text-sm text-blue-100 mb-2 flex items-center">
@@ -84,7 +105,9 @@ const FareBreakdown: React.FC<FareBreakdownProps> = ({
             <p className="text-3xl font-bold text-white">
               {formatCurrency(totalDue)}
             </p>
-            <p className="text-xs text-blue-200 mt-1">This month</p>
+            <p className="text-xs text-blue-200 mt-1">
+              {previousRentDue > 0 ? 'Including previous dues' : 'This month'}
+            </p>
           </div>
 
           <div>
@@ -118,7 +141,17 @@ const FareBreakdown: React.FC<FareBreakdownProps> = ({
             </span>
           </div>
           <div className="flex justify-between items-center text-sm pt-2 border-t border-blue-400 border-opacity-20">
-            <span className="text-blue-100 font-semibold">Total Monthly Fare:</span>
+            <span className="text-blue-100 font-semibold">Current Month Due:</span>
+            <span className="text-white font-bold">{formatCurrency(currentMonthDue)}</span>
+          </div>
+          {previousRentDue > 0 && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-red-200 font-semibold">Previous Rent Due:</span>
+              <span className="text-red-200 font-bold">{formatCurrency(previousRentDue)}</span>
+            </div>
+          )}
+          <div className="flex justify-between items-center text-sm pt-2 border-t border-blue-400 border-opacity-20">
+            <span className="text-blue-100 font-semibold">Total Due:</span>
             <span className="text-white font-bold text-lg">{formatCurrency(totalDue)}</span>
           </div>
           <div className="flex justify-between items-center text-xs pt-1 border-t border-blue-400 border-opacity-10">

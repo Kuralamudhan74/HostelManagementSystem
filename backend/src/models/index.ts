@@ -173,6 +173,7 @@ export interface ITenancy extends Document {
   withFood?: boolean;
   foodIncluded?: boolean;
   currentMonthEBBill?: number; // Current month's EB bill for this tenant
+  previousRentDue?: number; // Accumulated unpaid rent from previous months (starting Dec 2025)
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -187,6 +188,7 @@ const tenancySchema = new Schema<ITenancy>({
   withFood: { type: Boolean, default: false },
   foodIncluded: { type: Boolean, default: false }, // Alias for withFood
   currentMonthEBBill: { type: Number, default: 0 }, // Current month's EB bill
+  previousRentDue: { type: Number, default: 0 }, // Accumulated unpaid rent from previous months
   isActive: { type: Boolean, default: true }
 }, {
   timestamps: true

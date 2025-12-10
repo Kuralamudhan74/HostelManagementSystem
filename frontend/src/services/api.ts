@@ -149,6 +149,11 @@ class ApiClient {
     return response.data;
   }
 
+  async updateTenancyPreviousRentDue(tenancyId: string, previousRentDue: number): Promise<{ message: string; previousRentDue: number }> {
+    const response = await this.client.patch(`/admin/tenancies/${tenancyId}/previous-rent-due`, { previousRentDue });
+    return response.data;
+  }
+
   async getTenants(params?: {
     hostelId?: string;
     room?: string;
