@@ -1515,18 +1515,29 @@ export const permanentlyDeleteTenant = async (req: AuthRequest, res: Response): 
     const userName = `${user.firstName} ${user.lastName}`;
     const userId = user._id;
 
-    // Permanent deletion - remove ALL records from database
+    // Check if tenant has made payments (to preserve revenue)
+    const tenantPayments = await Payment.find({ tenantId: userId });
+    const hasPayments = tenantPayments.length > 0;
+
+    // Get tenancy IDs before deletion for rent deletion
+    const tenanciesToDelete = await Tenancy.find({ tenantId: userId });
+    const tenancyIds = tenanciesToDelete.map(t => t._id);
+
+    // Permanent deletion - remove records from database
+    // IMPORTANT: Payments are preserved to maintain revenue accuracy in dashboard
     // 1. Delete all tenancies
     const tenanciesDeleted = await Tenancy.deleteMany({ tenantId: userId });
     console.log(`Deleted ${tenanciesDeleted.deletedCount} tenancies for tenant ${userName}`);
 
-    // 2. Delete all payments
-    const paymentsDeleted = await Payment.deleteMany({ tenantId: userId });
-    console.log(`Deleted ${paymentsDeleted.deletedCount} payments for tenant ${userName}`);
+    // 2. Preserve payments - DO NOT DELETE payments as they represent actual revenue received
+    // This ensures monthly revenue in dashboard remains accurate even after tenant deletion
+    if (hasPayments) {
+      console.log(`Preserved ${tenantPayments.length} payments for tenant ${userName} to maintain revenue accuracy`);
+    }
 
     // 3. Delete all monthly rents associated with this tenant's tenancies
     const rentsDeleted = await MonthlyRent.deleteMany({
-      tenancyId: { $in: (await Tenancy.find({ tenantId: userId })).map(t => t._id) }
+      tenancyId: { $in: tenancyIds }
     });
     console.log(`Deleted ${rentsDeleted.deletedCount} rent records for tenant ${userName}`);
 
@@ -1534,26 +1545,34 @@ export const permanentlyDeleteTenant = async (req: AuthRequest, res: Response): 
     const billsDeleted = await Bill.deleteMany({ tenantId: userId });
     console.log(`Deleted ${billsDeleted.deletedCount} bills for tenant ${userName}`);
 
-    // 5. Delete payment allocations (cleanup orphaned records)
-    const paymentAllocationsDeleted = await PaymentAllocation.deleteMany({
-      paymentId: { $in: (await Payment.find({ tenantId: userId })).map(p => p._id) }
-    });
-    console.log(`Deleted ${paymentAllocationsDeleted.deletedCount} payment allocations for tenant ${userName}`);
+    // 5. Preserve payment allocations - they reference payments which we're keeping
+    // This maintains the link between payments and what they were allocated to
+    if (hasPayments) {
+      const paymentIds = tenantPayments.map(p => p._id);
+      const paymentAllocationsCount = await PaymentAllocation.countDocuments({
+        paymentId: { $in: paymentIds }
+      });
+      console.log(`Preserved ${paymentAllocationsCount} payment allocations for tenant ${userName}`);
+    }
 
     // 6. Finally, delete the user record
     await User.findByIdAndDelete(userId);
     console.log(`Permanently deleted user ${userName} (ID: ${userId})`);
 
     res.json({
-      message: `Tenant ${userName} and all associated records permanently deleted`,
+      message: `Tenant ${userName} and associated records permanently deleted. ${hasPayments ? `Payments preserved to maintain revenue accuracy.` : ''}`,
       deletedRecords: {
         tenancies: tenanciesDeleted.deletedCount,
-        payments: paymentsDeleted.deletedCount,
+        payments: 0, // Payments preserved
         rents: rentsDeleted.deletedCount,
         bills: billsDeleted.deletedCount,
-        paymentAllocations: paymentAllocationsDeleted.deletedCount,
+        paymentAllocations: 0, // Payment allocations preserved
         user: 1
-      }
+      },
+      preservedRecords: hasPayments ? {
+        payments: tenantPayments.length,
+        note: 'Payments preserved to maintain accurate monthly revenue in dashboard'
+      } : undefined
     });
   } catch (error: any) {
     console.error('Permanent delete tenant error:', error);
@@ -1692,14 +1711,52 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
     }
     const totalTenants = await Tenancy.countDocuments(tenancyQuery);
 
-    // Calculate monthly revenue (sum of all tenant shares for current month)
-    const activeTenancies = await Tenancy.find(tenancyQuery)
-      .populate('tenantId', 'firstName lastName')
-      .populate('roomId', 'roomNumber capacity rentAmount hostelId');
+    // Calculate monthly revenue based on actual payments made for current month
+    // This ensures revenue is preserved even if tenants are deleted after payment
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    const monthStart = new Date(currentYear, currentMonth, 1);
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
 
+    // Get all payments for the current month
+    // Payments are included if paymentPeriodStart or paymentDate falls within current month
+    // Priority: paymentPeriodStart (if exists) > paymentDate
+    let paymentQuery: any = {
+      $or: [
+        // Payments with paymentPeriodStart in current month (primary criteria)
+        { paymentPeriodStart: { $gte: monthStart, $lte: monthEnd } },
+        // Payments where paymentDate is in current month
+        // (used when paymentPeriodStart doesn't exist or is outside current month)
+        { paymentDate: { $gte: monthStart, $lte: monthEnd } }
+      ]
+    };
+
+    // If hostel filter is specified, we need to filter payments by tenant's hostel
+    if (hostelId && hostelId !== 'all') {
+      // Get all tenancies (active or inactive) for tenants in this hostel
+      // This includes tenants who may have been deleted but made payments
+      const allTenancies = await Tenancy.find({ roomId: { $in: roomIds } })
+        .select('tenantId');
+      
+      // Extract tenant IDs, handling both ObjectId and populated references
+      const tenantIdsInHostel = allTenancies.map((t: any) => {
+        const tenantId = t.tenantId?._id || t.tenantId;
+        return tenantId ? tenantId.toString() : null;
+      }).filter((id: string | null) => id !== null);
+      
+      if (tenantIdsInHostel.length > 0) {
+        paymentQuery.tenantId = { $in: tenantIdsInHostel };
+      } else {
+        // No tenants in this hostel, set revenue to 0
+        paymentQuery.tenantId = { $in: [] };
+      }
+    }
+
+    const currentMonthPayments = await Payment.find(paymentQuery);
     let monthlyRevenue = 0;
-    activeTenancies.forEach((tenancy: any) => {
-      monthlyRevenue += tenancy.tenantShare || 0;
+    currentMonthPayments.forEach((payment: any) => {
+      monthlyRevenue += payment.amount || 0;
     });
 
     // Calculate room statistics
